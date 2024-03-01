@@ -309,25 +309,6 @@ describe('KinesisEventSource', () => {
     });
   });
 
-  test('infinite max record age', () => {
-    // GIVEN
-    const stack = new cdk.Stack();
-    const fn = new TestFunction(stack, 'Fn');
-    const stream = new kinesis.Stream(stack, 'S');
-    const eventSource = new sources.KinesisEventSource(stream, {
-      maxRecordAge: -1,
-      startingPosition: lambda.StartingPosition.TRIM_HORIZON,
-    });
-
-    // WHEN
-    fn.addEventSource(eventSource);
-
-    // THEN
-    Template.fromStack(stack).hasResourceProperties('AWS::Lambda::EventSourceMapping', {
-      MaximumRecordAgeInSeconds: -1,
-    });
-  });
-
   test('S3 onFailure Destination raise unsupport error', () => {
     // GIVEN
     const stack = new cdk.Stack();
@@ -348,6 +329,26 @@ describe('KinesisEventSource', () => {
     //THEN
     }).toThrowError('S3 onFailure Destination is not supported for this event source');
 
+  });
+
+
+  test('infinite max record age', () => {
+    // GIVEN
+    const stack = new cdk.Stack();
+    const fn = new TestFunction(stack, 'Fn');
+    const stream = new kinesis.Stream(stack, 'S');
+    const eventSource = new sources.KinesisEventSource(stream, {
+      maxRecordAge: -1,
+      startingPosition: lambda.StartingPosition.TRIM_HORIZON,
+    });
+
+    // WHEN
+    fn.addEventSource(eventSource);
+
+    // THEN
+    Template.fromStack(stack).hasResourceProperties('AWS::Lambda::EventSourceMapping', {
+      MaximumRecordAgeInSeconds: -1,
+    });
   });
 
 });
