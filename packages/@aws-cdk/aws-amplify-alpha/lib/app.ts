@@ -164,7 +164,7 @@ export interface AppProps {
    * generated (SSG) apps (i.e. a Create React App or Gatsby) and WEB_COMPUTE
    * for server side rendered (SSR) apps (i.e. NextJS).
    *
-   * @default - WEB
+   * @default Platform.WEB
    */
   readonly platform?: Platform;
 }
@@ -342,7 +342,7 @@ export interface AutoBranchCreation {
    *
    * @default - application build spec
    */
-  readonly buildSpec?: codebuild.BuildSpec
+  readonly buildSpec?: codebuild.BuildSpec;
 
   /**
    * Whether to enable auto building for the auto created branch
@@ -430,7 +430,7 @@ export interface CustomRuleOptions {
    *
    * @see https://docs.aws.amazon.com/amplify/latest/userguide/redirects.html
    */
-  readonly target: string
+  readonly target: string;
 
   /**
    * The status code for a URL rewrite or redirect rule.
@@ -539,6 +539,9 @@ function renderCustomResponseHeaders(customHeaders: CustomResponseHeader[]): str
   return `${yaml.join('\n')}\n`;
 }
 
+/**
+ * Available hosting platforms to use on the App.
+ */
 export enum Platform {
   /**
    * WEB - Used to indicate that the app is hosted using only static assets.

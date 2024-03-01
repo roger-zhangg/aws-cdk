@@ -2,6 +2,9 @@ import { Resource, IResource, Stack, ArnFormat, Names, Duration } from 'aws-cdk-
 import { CfnDeploymentStrategy } from 'aws-cdk-lib/aws-appconfig';
 import { Construct } from 'constructs';
 
+/**
+ * Properties for DeploymentStrategy.
+ */
 export interface DeploymentStrategyProps {
   /**
    * The rollout strategy for the deployment strategy. You can use predefined deployment
@@ -15,7 +18,7 @@ export interface DeploymentStrategyProps {
    *
    * @default - A name is generated.
    */
-  readonly name?: string;
+  readonly deploymentStrategyName?: string;
 
   /**
    * A description of the deployment strategy.
@@ -63,16 +66,16 @@ export class DeploymentStrategy extends Resource implements IDeploymentStrategy 
    * @param id The name of the deployment strategy construct
    * @param deploymentStrategyId The ID of the deployment strategy
    */
-  public static fromDeploymentStrategyId(scope: Construct, id: string, deploymentStrategyId: string): IDeploymentStrategy {
+  public static fromDeploymentStrategyId(scope: Construct, id: string, deploymentStrategyId: DeploymentStrategyId): IDeploymentStrategy {
     const stack = Stack.of(scope);
     const deploymentStrategyArn = stack.formatArn({
       service: 'appconfig',
       resource: 'deploymentstrategy',
-      resourceName: deploymentStrategyId,
+      resourceName: deploymentStrategyId.id,
     });
 
     class Import extends Resource implements IDeploymentStrategy {
-      public readonly deploymentStrategyId = deploymentStrategyId;
+      public readonly deploymentStrategyId = deploymentStrategyId.id;
       public readonly deploymentStrategyArn = deploymentStrategyArn;
     }
 
@@ -118,6 +121,8 @@ export class DeploymentStrategy extends Resource implements IDeploymentStrategy 
 
   /**
    * The Amazon Resource Name (ARN) of the deployment strategy.
+   *
+   * @attribute
    */
   public readonly deploymentStrategyArn: string;
 
@@ -125,7 +130,7 @@ export class DeploymentStrategy extends Resource implements IDeploymentStrategy 
 
   constructor(scope: Construct, id: string, props: DeploymentStrategyProps) {
     super(scope, id, {
-      physicalName: props.name,
+      physicalName: props.deploymentStrategyName,
     });
 
     this.deploymentDurationInMinutes = props.rolloutStrategy.deploymentDuration.toMinutes();
@@ -133,7 +138,7 @@ export class DeploymentStrategy extends Resource implements IDeploymentStrategy 
     this.description = props.description;
     this.finalBakeTimeInMinutes = props.rolloutStrategy.finalBakeTime?.toMinutes();
     this.growthType = props.rolloutStrategy.growthType;
-    this.name = props.name || Names.uniqueResourceName(this, {
+    this.name = props.deploymentStrategyName || Names.uniqueResourceName(this, {
       maxLength: 64,
       separator: '-',
     });
@@ -162,20 +167,72 @@ export class DeploymentStrategy extends Resource implements IDeploymentStrategy 
  * Defines the growth type of the deployment strategy.
  */
 export enum GrowthType {
+  /**
+   * AWS AppConfig will process the deployment by increments of the growth factor
+   * evenly distributed over the deployment.
+   */
   LINEAR = 'LINEAR',
+
+  /**
+   * AWS AppConfig will process the deployment exponentially using the following formula:
+   * `G*(2^N)`. In this formula, `G` is the step percentage specified by the user and `N`
+   * is the number of steps until the configuration is deployed to all targets.
+   */
   EXPONENTIAL = 'EXPONENTIAL',
 }
 
 /**
- * Defines the deployment strategy ID's of AWS AppConfig predefined strategies.
+ * Defines the deployment strategy ID's of AWS AppConfig deployment strategies.
+ *
+ * @see https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-creating-deployment-strategy.html
  */
-export enum PredefinedDeploymentStrategyId {
-  CANARY_10_PERCENT_20_MINUTES = 'AppConfig.Canary10Percent20Minutes',
-  LINEAR_50_PERCENT_EVERY_30_SECONDS = 'AppConfig.Linear50PercentEvery30Seconds',
-  LINEAR_20_PERCENT_EVERY_6_MINUTES = 'AppConfig.Linear20PercentEvery6Minutes',
-  ALL_AT_ONCE = 'AppConfig.AllAtOnce',
+export abstract class DeploymentStrategyId {
+  /**
+   * **AWS Recommended**. This strategy processes the deployment exponentially using a 10% growth factor over 20 minutes.
+   * AWS AppConfig recommends using this strategy for production deployments because it aligns with AWS best practices
+   * for configuration deployments.
+   */
+  public static readonly CANARY_10_PERCENT_20_MINUTES = DeploymentStrategyId.fromString('AppConfig.Canary10Percent20Minutes');
+
+  /**
+   * **Testing/Demonstration**. This strategy deploys the configuration to half of all targets every 30 seconds for a
+   * one-minute deployment. AWS AppConfig recommends using this strategy only for testing or demonstration purposes because
+   * it has a short duration and bake time.
+   */
+  public static readonly LINEAR_50_PERCENT_EVERY_30_SECONDS = DeploymentStrategyId.fromString('AppConfig.Linear50PercentEvery30Seconds');
+
+  /**
+   * **AWS Recommended**. This strategy deploys the configuration to 20% of all targets every six minutes for a 30 minute deployment.
+   * AWS AppConfig recommends using this strategy for production deployments because it aligns with AWS best practices
+   * for configuration deployments.
+   */
+  public static readonly LINEAR_20_PERCENT_EVERY_6_MINUTES = DeploymentStrategyId.fromString('AppConfig.Linear20PercentEvery6Minutes');
+
+  /**
+   * **Quick**. This strategy deploys the configuration to all targets immediately.
+   */
+  public static readonly ALL_AT_ONCE = DeploymentStrategyId.fromString('AppConfig.AllAtOnce');
+
+  /**
+   * Builds a deployment strategy ID from a string.
+   *
+   * @param deploymentStrategyId The deployment strategy ID.
+   */
+  public static fromString(deploymentStrategyId: string): DeploymentStrategyId {
+    return {
+      id: deploymentStrategyId,
+    };
+  }
+
+  /**
+   * The deployment strategy ID.
+   */
+  public abstract readonly id: string;
 }
 
+/**
+ * Properties for the Rollout Strategy.
+ */
 export interface RolloutStrategyProps {
   /**
    * The growth factor of the deployment strategy. This defines
@@ -207,23 +264,46 @@ export interface RolloutStrategyProps {
 /**
  * Defines the rollout strategy for a deployment strategy and includes the growth factor,
  * deployment duration, growth type, and optionally final bake time.
+ *
+ * @see https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-creating-deployment-strategy.html
  */
 export abstract class RolloutStrategy {
+  /**
+   * **AWS Recommended**. This strategy processes the deployment exponentially using a 10% growth factor over 20 minutes.
+   * AWS AppConfig recommends using this strategy for production deployments because it aligns with AWS best practices
+   * for configuration deployments.
+   */
   public static readonly CANARY_10_PERCENT_20_MINUTES = RolloutStrategy.exponential({
     growthFactor: 10,
     deploymentDuration: Duration.minutes(20),
     finalBakeTime: Duration.minutes(10),
   });
+
+  /**
+   * **Testing/Demonstration**. This strategy deploys the configuration to half of all targets every 30 seconds for a
+   * one-minute deployment. AWS AppConfig recommends using this strategy only for testing or demonstration purposes because
+   * it has a short duration and bake time.
+   */
   public static readonly LINEAR_50_PERCENT_EVERY_30_SECONDS = RolloutStrategy.linear({
     growthFactor: 50,
     deploymentDuration: Duration.minutes(1),
     finalBakeTime: Duration.minutes(1),
   });
+
+  /**
+   * **AWS Recommended**. This strategy deploys the configuration to 20% of all targets every six minutes for a 30 minute deployment.
+   * AWS AppConfig recommends using this strategy for production deployments because it aligns with AWS best practices
+   * for configuration deployments.
+   */
   public static readonly LINEAR_20_PERCENT_EVERY_6_MINUTES = RolloutStrategy.linear({
     growthFactor: 20,
     deploymentDuration: Duration.minutes(30),
     finalBakeTime: Duration.minutes(30),
   });
+
+  /**
+   * **Quick**. This strategy deploys the configuration to all targets immediately.
+   */
   public static readonly ALL_AT_ONCE = RolloutStrategy.linear({
     growthFactor: 100,
     deploymentDuration: Duration.minutes(0),
@@ -231,7 +311,7 @@ export abstract class RolloutStrategy {
   });
 
   /**
-   * @returns A linear rollout strategy.
+   * Build your own linear rollout strategy.
    */
   public static linear(props: RolloutStrategyProps): RolloutStrategy {
     return {
@@ -243,7 +323,7 @@ export abstract class RolloutStrategy {
   }
 
   /**
-   * @returns An exponential rollout strategy.
+   * Build your own exponential rollout strategy.
    */
   public static exponential(props: RolloutStrategyProps): RolloutStrategy {
     return {
@@ -308,11 +388,13 @@ export interface IDeploymentStrategy extends IResource {
 
   /**
    * The ID of the deployment strategy.
+   * @attribute
    */
   readonly deploymentStrategyId: string;
 
   /**
    * The Amazon Resource Name (ARN) of the deployment strategy.
+   * @attribute
    */
   readonly deploymentStrategyArn: string;
 }

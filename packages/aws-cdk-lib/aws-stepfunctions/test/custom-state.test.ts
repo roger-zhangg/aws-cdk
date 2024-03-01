@@ -33,6 +33,7 @@ describe('Custom State', () => {
     // THEN
     expect(customState.toStateJson()).toStrictEqual({
       ...stateJson,
+      ...{ Catch: undefined, Retry: undefined },
       End: true,
     });
   });
@@ -66,6 +67,175 @@ describe('Custom State', () => {
           },
           'my-pass-state': {
             Type: 'Pass',
+            End: true,
+          },
+        },
+      },
+    );
+  });
+
+  test('can add a catch state', () => {
+    // GIVEN
+    const failure = new sfn.Fail(stack, 'failed', {
+      error: 'DidNotWork',
+      cause: 'We got stuck',
+    });
+    const custom = new sfn.CustomState(stack, 'Custom', {
+      stateJson,
+    });
+    const chain = sfn.Chain.start(custom);
+
+    // WHEN
+    custom.addCatch(failure);
+
+    // THEN
+    expect(render(stack, chain)).toStrictEqual(
+      {
+        StartAt: 'Custom',
+        States: {
+          Custom: {
+            Type: 'Task',
+            Resource: 'arn:aws:states:::dynamodb:putItem',
+            Parameters: {
+              TableName: 'MyTable',
+              Item: {
+                id: {
+                  S: 'MyEntry',
+                },
+              },
+            },
+            ResultPath: null,
+            Catch: [{
+              ErrorEquals: ['States.ALL'],
+              Next: 'failed',
+            }],
+            End: true,
+          },
+          failed: {
+            Type: 'Fail',
+            Error: 'DidNotWork',
+            Cause: 'We got stuck',
+          },
+        },
+      },
+    );
+  });
+
+  test('can add a retry state', () => {
+    // GIVEN
+    const custom = new sfn.CustomState(stack, 'Custom', {
+      stateJson,
+    });
+    const chain = sfn.Chain.start(custom);
+
+    // WHEN
+    custom.addRetry({
+      errors: [sfn.Errors.ALL],
+      interval: cdk.Duration.seconds(10),
+      maxAttempts: 5,
+    });
+
+    // THEN
+    expect(render(stack, chain)).toStrictEqual(
+      {
+        StartAt: 'Custom',
+        States: {
+          Custom: {
+            Type: 'Task',
+            Resource: 'arn:aws:states:::dynamodb:putItem',
+            Parameters: {
+              TableName: 'MyTable',
+              Item: {
+                id: {
+                  S: 'MyEntry',
+                },
+              },
+            },
+            ResultPath: null,
+            Retry: [{
+              ErrorEquals: ['States.ALL'],
+              IntervalSeconds: 10,
+              MaxAttempts: 5,
+            }],
+            End: true,
+          },
+        },
+      },
+    );
+  });
+
+  test('respect the Retry field in the stateJson', () => {
+    // GIVEN
+    const custom = new sfn.CustomState(stack, 'Custom', {
+      stateJson: {
+        Type: 'Task',
+        Resource: 'arn:aws:states:::dynamodb:putItem',
+        Parameters: {
+          TableName: 'MyTable',
+          Item: {
+            id: {
+              S: 'MyEntry',
+            },
+          },
+        },
+        ResultPath: null,
+        Retry: [
+          {
+            ErrorEquals: [sfn.Errors.TIMEOUT],
+            IntervalSeconds: 20,
+            MaxAttempts: 2,
+          },
+          {
+            ErrorEquals: [sfn.Errors.RESULT_PATH_MATCH_FAILURE],
+            IntervalSeconds: 20,
+            MaxAttempts: 2,
+          },
+        ],
+      },
+    });
+    const chain = sfn.Chain.start(custom);
+
+    // WHEN
+    custom.addRetry({
+      errors: [sfn.Errors.PERMISSIONS],
+      interval: cdk.Duration.seconds(10),
+      maxAttempts: 5,
+    });
+
+    // THEN
+    expect(render(stack, chain)).toStrictEqual(
+      {
+        StartAt: 'Custom',
+        States: {
+          Custom: {
+            Type: 'Task',
+            Resource: 'arn:aws:states:::dynamodb:putItem',
+            Parameters: {
+              TableName: 'MyTable',
+              Item: {
+                id: {
+                  S: 'MyEntry',
+                },
+              },
+            },
+            ResultPath: null,
+            Retry: [
+              {
+                ErrorEquals: ['States.Permissions'],
+                IntervalSeconds: 10,
+                MaxAttempts: 5,
+              },
+              {
+                ErrorEquals: ['States.Timeout'],
+                IntervalSeconds: 20,
+                MaxAttempts: 2,
+              },
+              {
+                ErrorEquals: ['States.ResultPathMatchFailure'],
+                IntervalSeconds: 20,
+                MaxAttempts: 2,
+              },
+            ],
             End: true,
           },
         },

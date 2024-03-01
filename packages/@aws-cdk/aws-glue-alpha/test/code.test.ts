@@ -43,7 +43,6 @@ describe('Code', () => {
               Action: [
                 's3:GetObject*',
                 's3:GetBucket*',
-                's3:HeadObject',
                 's3:List*',
               ],
               Effect: 'Allow',
@@ -86,7 +85,7 @@ describe('Code', () => {
   });
 
   describe('.fromAsset()', () => {
-    const filePath = path.join(__dirname, 'job-script/hello_world.py');
+    const filePath = path.join(__dirname, 'job-script', 'hello_world.py');
     const directoryPath = path.join(__dirname, 'job-script');
 
     beforeEach(() => {
@@ -153,7 +152,6 @@ describe('Code', () => {
               Action: [
                 's3:GetObject*',
                 's3:GetBucket*',
-                's3:HeadObject',
                 's3:List*',
               ],
               Effect: 'Allow',

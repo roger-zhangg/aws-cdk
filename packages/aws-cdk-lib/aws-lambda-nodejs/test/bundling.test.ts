@@ -106,6 +106,29 @@ test('esbuild bundling with handler named index.ts', () => {
   });
 });
 
+test('esbuild bundling with verbose log level', () => {
+  Bundling.bundle(stack, {
+    entry: '/project/lib/index.ts',
+    projectRoot,
+    depsLockFilePath,
+    runtime: STANDARD_RUNTIME,
+    architecture: Architecture.X86_64,
+    forceDockerBundling: true,
+    logLevel: LogLevel.VERBOSE,
+  });
+
+  // Correctly bundles with esbuild with log level VERBOSE
+  expect(Code.fromAsset).toHaveBeenCalledWith('/project', {
+    assetHashType: AssetHashType.OUTPUT,
+    bundling: expect.objectContaining({
+      command: [
+        'bash', '-c',
+        `esbuild --bundle "/asset-input/lib/index.ts" --target=${STANDARD_TARGET} --platform=node --outfile="/asset-output/index.js" --external:${STANDARD_EXTERNAL} --log-level=verbose`,
+      ],
+    }),
+  });
+});
+
 test('esbuild bundling with tsx handler', () => {
   Bundling.bundle(stack, {
     entry: '/project/lib/handler.tsx',
@@ -603,7 +626,7 @@ test('esbuild bundling with projectRoot', () => {
 });
 
 test('esbuild bundling with projectRoot and externals and dependencies', () => {
-  const repoRoot = path.join(__dirname, '../../../..');
+  const repoRoot = path.join(__dirname, '..', '..', '..', '..');
   const packageLock = path.join(repoRoot, 'common', 'package-lock.json');
   Bundling.bundle(stack, {
     entry: __filename,

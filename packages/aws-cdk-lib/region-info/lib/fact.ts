@@ -5,12 +5,31 @@ import { AWS_REGIONS } from './aws-entities';
  */
 export class Fact {
   /**
-   * @returns the list of names of AWS regions for which there is at least one registered fact. This
-   *          may not be an exhaustive list of all available AWS regions.
+   * @returns the list of names of AWS Regions for which there is at least one registered fact. This
+   *          includes Regions defined in AWS_REGIONS plus custom defined regions.
    */
   public static get regions(): string[] {
-    // Return by copy to ensure no modifications can be made to the undelying constant.
-    return Array.from(AWS_REGIONS);
+    // Return the union of regions in AWS_REGIONS and custom defined regions.
+    return [...new Set([...AWS_REGIONS, ...Object.keys(this.database)])];
+  }
+
+  /**
+   * Returns the list of names of registered facts.
+   *
+   * All facts will be present in at least one region.
+   */
+  public static get names(): string[] {
+    return [...new Set(Object.values(this.database).flatMap(regionFacts => Object.keys(regionFacts)))];
+  }
+
+  /**
+   * Return all pairs of (region, factName) that are defined
+   */
+  public static definedFacts(): Array<string[]> {
+    return Object.entries(this.database)
+      .flatMap(([regionName, regionFacts]) =>
+        Object.keys(regionFacts).map((factName) =>
+          [regionName, factName] satisfies [string, string]));
   }
 
   /**
@@ -37,7 +56,7 @@ export class Fact {
     const foundFact = this.find(region, name);
 
     if (!foundFact) {
-      throw new Error(`No fact ${name} could be found for region: ${region} and name: ${name}`);
+      throw new Error(`No fact ${name} could be found for region: ${region} and name: ${name}.`);
     }
 
     return foundFact;
@@ -170,6 +189,11 @@ export class FactName {
    * The CIDR block used by Kinesis Data Firehose servers.
    */
   public static readonly FIREHOSE_CIDR_BLOCK = 'firehoseCidrBlock';
+
+  /**
+   * The SAML Sign On URL for partition used by IAM SAML Principal
+   */
+  public static readonly SAML_SIGN_ON_URL = 'samlSignOnUrl';
 
   /**
    * The ARN of CloudWatch Lambda Insights for a version (e.g. 1.0.98.0)

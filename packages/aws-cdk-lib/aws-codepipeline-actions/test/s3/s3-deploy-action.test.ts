@@ -57,7 +57,6 @@ describe('S3 Deploy Action', () => {
             'Action': [
               's3:GetObject*',
               's3:GetBucket*',
-              's3:HeadObject',
               's3:List*',
               's3:DeleteObject*',
               's3:PutObject',
@@ -124,6 +123,23 @@ describe('S3 Deploy Action', () => {
         },
       ],
     });
+  });
+
+  test('cache-control directive has correct values', () => {
+    expect(cpactions.CacheControl.mustRevalidate().value).toEqual('must-revalidate');
+    expect(cpactions.CacheControl.noCache().value).toEqual('no-cache');
+    expect(cpactions.CacheControl.noTransform().value).toEqual('no-transform');
+    expect(cpactions.CacheControl.noStore().value).toEqual('no-store');
+    expect(cpactions.CacheControl.mustUnderstand().value).toEqual('must-understand');
+    expect(cpactions.CacheControl.setPublic().value).toEqual('public');
+    expect(cpactions.CacheControl.setPrivate().value).toEqual('private');
+    expect(cpactions.CacheControl.immutable().value).toEqual('immutable');
+    expect(cpactions.CacheControl.proxyRevalidate().value).toEqual('proxy-revalidate');
+    expect(cpactions.CacheControl.maxAge(Duration.minutes(1)).value).toEqual('max-age=60');
+    expect(cpactions.CacheControl.sMaxAge(Duration.minutes(1)).value).toEqual('s-maxage=60');
+    expect(cpactions.CacheControl.staleWhileRevalidate(Duration.minutes(1)).value).toEqual('stale-while-revalidate=60');
+    expect(cpactions.CacheControl.staleIfError(Duration.minutes(1)).value).toEqual('stale-if-error=60');
+    expect(cpactions.CacheControl.fromString('custom').value).toEqual('custom');
   });
 
   test('allow customizing objectKey (deployment path on S3)', () => {

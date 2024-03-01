@@ -11,7 +11,7 @@ import * as kms from '../../aws-kms';
 import * as logs from '../../aws-logs';
 import * as s3 from '../../aws-s3';
 import * as cloudmap from '../../aws-servicediscovery';
-import { Duration, IResource, Resource, Stack, Aspects, ArnFormat, IAspect } from '../../core';
+import { Duration, IResource, Resource, Stack, Aspects, ArnFormat, IAspect, Token } from '../../core';
 
 const CLUSTER_SYMBOL = Symbol.for('@aws-cdk/aws-ecs/lib/cluster.Cluster');
 
@@ -89,7 +89,7 @@ export enum MachineImageType {
   /**
    * Bottlerocket AMI
    */
-  BOTTLEROCKET
+  BOTTLEROCKET,
 }
 
 /**
@@ -451,8 +451,8 @@ export class Cluster extends Resource implements ICluster {
     this.configureAutoScalingGroup(provider.autoScalingGroup, {
       ...options,
       machineImageType: provider.machineImageType,
-      // Don't enable the instance-draining lifecycle hook if managed termination protection is enabled
-      taskDrainTime: provider.enableManagedTerminationProtection ? Duration.seconds(0) : options.taskDrainTime,
+      // Don't enable the instance-draining lifecycle hook if managed termination protection or managed draining is enabled
+      taskDrainTime: (provider.enableManagedTerminationProtection || provider.enableManagedDraining)? Duration.seconds(0) : options.taskDrainTime,
       canContainersAccessInstanceRole: options.canContainersAccessInstanceRole ?? provider.canContainersAccessInstanceRole,
     });
 
@@ -581,6 +581,36 @@ export class Cluster extends Resource implements ICluster {
     if (!this._capacityProviderNames.includes(provider)) {
       this._capacityProviderNames.push(provider);
     }
+  }
+
+  /**
+   * Returns an ARN that represents all tasks within the cluster that match
+   * the task pattern specified. To represent all tasks, specify ``"*"``.
+   *
+   * @param keyPattern Task id pattern
+   */
+  public arnForTasks(keyPattern: string): string {
+    return Stack.of(this).formatArn({
+      service: 'ecs',
+      resource: 'task',
+      resourceName: `${this.clusterName}/${keyPattern}`,
+      arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+    });
+  }
+
+  /**
+  * Grants an ECS Task Protection API permission to the specified grantee.
+  * This method provides a streamlined way to assign the 'ecs:UpdateTaskProtection'
+  * permission, enabling the grantee to manage task protection in the ECS cluster.
+  *
+  * @param grantee The entity (e.g., IAM role or user) to grant the permissions to.
+  */
+  public grantTaskProtection(grantee: iam.IGrantable): iam.Grant {
+    return iam.Grant.addToPrincipal({
+      grantee,
+      actions: ['ecs:UpdateTaskProtection'],
+      resourceArns: [this.arnForTasks('*')],
+    });
   }
 
   private configureWindowsAutoScalingGroup(autoScalingGroup: autoscaling.AutoScalingGroup, options: AddAutoScalingGroupCapacityOptions = {}) {
@@ -900,7 +930,7 @@ export interface AddAutoScalingGroupCapacityOptions {
    *
    * @default false
    */
-  readonly spotInstanceDraining?: boolean
+  readonly spotInstanceDraining?: boolean;
 
   /**
    * If `AddAutoScalingGroupCapacityOptions.taskDrainTime` is non-zero, then the ECS cluster creates an
@@ -1046,21 +1076,21 @@ export interface ExecuteCommandConfiguration {
    *
    * @default - none
    */
-  readonly kmsKey?: kms.IKey,
+  readonly kmsKey?: kms.IKey;
 
   /**
    * The log configuration for the results of the execute command actions. The logs can be sent to CloudWatch Logs or an Amazon S3 bucket.
    *
    * @default - none
    */
-  readonly logConfiguration?: ExecuteCommandLogConfiguration,
+  readonly logConfiguration?: ExecuteCommandLogConfiguration;
 
   /**
    * The log settings to use for logging the execute command session.
    *
    * @default - none
    */
-  readonly logging?: ExecuteCommandLogging,
+  readonly logging?: ExecuteCommandLogging;
 }
 
 /**
@@ -1094,34 +1124,34 @@ export interface ExecuteCommandLogConfiguration {
    *
    * @default - encryption will be disabled.
    */
-  readonly cloudWatchEncryptionEnabled?: boolean,
+  readonly cloudWatchEncryptionEnabled?: boolean;
 
   /**
    * The name of the CloudWatch log group to send logs to. The CloudWatch log group must already be created.
    * @default - none
    */
-  readonly cloudWatchLogGroup?: logs.ILogGroup,
+  readonly cloudWatchLogGroup?: logs.ILogGroup;
 
   /**
    * The name of the S3 bucket to send logs to. The S3 bucket must already be created.
    *
    * @default - none
    */
-  readonly s3Bucket?: s3.IBucket,
+  readonly s3Bucket?: s3.IBucket;
 
   /**
    * Whether or not to enable encryption on the S3 bucket.
    *
    * @default - encryption will be disabled.
    */
-  readonly s3EncryptionEnabled?: boolean,
+  readonly s3EncryptionEnabled?: boolean;
 
   /**
    * An optional folder in the S3 bucket to place logs in.
    *
    * @default - none
    */
-  readonly s3KeyPrefix?: string
+  readonly s3KeyPrefix?: string;
 }
 
 /**
@@ -1168,6 +1198,16 @@ export interface AsgCapacityProviderProps extends AddAutoScalingGroupCapacityOpt
   readonly enableManagedTerminationProtection?: boolean;
 
   /**
+   * Managed instance draining facilitates graceful termination of Amazon ECS instances.
+   * This allows your service workloads to stop safely and be rescheduled to non-terminating instances.
+   * Infrastructure maintenance and updates are preformed without disruptions to workloads.
+   * To use managed instance draining, set enableManagedDraining to true.
+   *
+   * @default true
+   */
+  readonly enableManagedDraining?: boolean;
+
+  /**
    * Maximum scaling step size. In most cases this should be left alone.
    *
    * @default 1000
@@ -1187,6 +1227,16 @@ export interface AsgCapacityProviderProps extends AddAutoScalingGroupCapacityOpt
    * @default 100
    */
   readonly targetCapacityPercent?: number;
+
+  /**
+   * The period of time, in seconds, after a newly launched Amazon EC2 instance
+   * can contribute to CloudWatch metrics for Auto Scaling group.
+   *
+   * Must be between 0 and 10000.
+   *
+   * @default 300
+   */
+  readonly instanceWarmupPeriod?: number;
 }
 
 /**
@@ -1219,6 +1269,11 @@ export class AsgCapacityProvider extends Construct {
   readonly enableManagedTerminationProtection?: boolean;
 
   /**
+   * Whether managed draining is enabled.
+   */
+  readonly enableManagedDraining?: boolean;
+
+  /**
    * Specifies whether the containers can access the container instance role.
    *
    * @default false
@@ -1231,6 +1286,12 @@ export class AsgCapacityProvider extends Construct {
     this.machineImageType = props.machineImageType ?? MachineImageType.AMAZON_LINUX_2;
     this.canContainersAccessInstanceRole = props.canContainersAccessInstanceRole;
     this.enableManagedTerminationProtection = props.enableManagedTerminationProtection ?? true;
+    this.enableManagedDraining = props.enableManagedDraining;
+
+    let managedDraining = undefined;
+    if (this.enableManagedDraining != undefined) {
+      managedDraining = this.enableManagedDraining ? 'ENABLED' : 'DISABLED';
+    }
 
     if (this.enableManagedTerminationProtection && props.enableManagedScaling === false) {
       throw new Error('Cannot enable Managed Termination Protection on a Capacity Provider when Managed Scaling is disabled. Either enable Managed Scaling or disable Managed Termination Protection.');
@@ -1244,6 +1305,13 @@ export class AsgCapacityProvider extends Construct {
         throw new Error(`Invalid Capacity Provider Name: ${props.capacityProviderName}, If a name is specified, it cannot start with aws, ecs, or fargate.`);
       }
     }
+
+    if (props.instanceWarmupPeriod && !Token.isUnresolved(props.instanceWarmupPeriod)) {
+      if (props.instanceWarmupPeriod < 0 || props.instanceWarmupPeriod > 10000) {
+        throw new Error(`InstanceWarmupPeriod must be between 0 and 10000 inclusive, got: ${props.instanceWarmupPeriod}.`);
+      }
+    }
+
     const capacityProvider = new CfnCapacityProvider(this, id, {
       name: props.capacityProviderName,
       autoScalingGroupProvider: {
@@ -1253,8 +1321,10 @@ export class AsgCapacityProvider extends Construct {
           targetCapacity: props.targetCapacityPercent || 100,
           maximumScalingStepSize: props.maximumScalingStepSize,
           minimumScalingStepSize: props.minimumScalingStepSize,
+          instanceWarmupPeriod: props.instanceWarmupPeriod,
         },
         managedTerminationProtection: this.enableManagedTerminationProtection ? 'ENABLED' : 'DISABLED',
+        managedDraining: managedDraining,
       },
     });
 

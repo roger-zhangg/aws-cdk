@@ -201,6 +201,18 @@ const globalTable = new dynamodb.TableV2(stack, 'GlobalTable', {
 });
 ```
 
+When changing the billing for a table from provisioned to on-demand or from on-demand to provisioned, `seedCapacity` must be configured for each autoscaled resource:
+
+```ts
+const globalTable = new dynamodb.TableV2(this, 'Table', {
+  partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+  billing: dynamodb.Billing.provisioned({
+    readCapacity: dynamodb.Capacity.fixed(10),
+    writeCapacity: dynamodb.Capacity.autoscaled({ maxCapacity: 10, seedCapacity: 20 }),
+  }),
+});
+```
+
 Further reading:
 https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadWriteCapacityMode.html
 
@@ -588,6 +600,31 @@ const table = new dynamodb.TableV2(this, 'Table', {
 Further reading:
 https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.TableClasses.html
 
+## Tags
+
+You can add tags to a `TableV2` in several ways. By adding the tags to the construct itself it will apply the tags to the 
+primary table.
+```ts
+const table = new dynamodb.TableV2(this, 'Table', {
+  partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+  tags: [{key: 'primaryTableTagKey', value: 'primaryTableTagValue'}],
+});
+```
+
+You can also add tags to replica tables by specifying them within the replica table properties.
+
+```ts
+const table = new dynamodb.TableV2(this, 'Table', {
+  partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+  replicas: [
+    {
+      region: 'us-west-1',
+      tags: [{key: 'replicaTableTagKey', value: 'replicaTableTagValue'}]
+    }
+  ]
+});
+```
+
 ## Referencing Existing Global Tables
 
 To reference an existing DynamoDB table in your CDK application, use the `TableV2.fromTableName`, `TableV2.fromTableArn`, or `TableV2.fromTableAttributes`
@@ -744,5 +781,100 @@ const fooStack = new FooStack(app, 'FooStack', { env: { region: 'us-west-2' } })
 const barStack = new BarStack(app, 'BarStack', {
   replicaTable: fooStack.globalTable.replica('us-east-1'),
   env: { region: 'us-east-1' },
+});
+```
+
+## import from S3 Bucket
+You can import data in S3 when creating a Table using the `Table` construct.
+To import data into DynamoDB, it is required that your data is in a CSV, DynamoDB JSON, or Amazon Ion format within an Amazon S3 bucket.
+The data may be compressed using ZSTD or GZIP formats, or you may choose to import it without compression.
+The data source can be a single S3 object or multiple S3 objects sharing a common prefix.
+
+
+Further reading:
+https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/S3DataImport.HowItWorks.html
+
+### use CSV format
+The `InputFormat.csv` method accepts `delimiter` and `headerList` options as arguments.
+If `delimiter` is not specified, `,` is used by default.
+And if `headerList` is specified, the first line of CSV is treated as data instead of header.
+
+```ts
+import * as cdk from 'aws-cdk-lib';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+
+const app = new cdk.App();
+const stack = new cdk.Stack(app, 'Stack');
+
+declare const bucket: s3.IBucket;
+
+new dynamodb.Table(stack, 'Table', {
+  partitionKey: {
+    name: 'id',
+    type: dynamodb.AttributeType.STRING,
+  },
+  importSource: {
+    compressionType: dynamodb.InputCompressionType.GZIP,
+    inputFormat: dynamodb.InputFormat.csv({
+      delimiter: ',',
+      headerList: ['id', 'name'],
+    }),
+    bucket,
+    keyPrefix: 'prefix',
+  },
+});
+```
+
+### use DynamoDB JSON format
+Use the `InputFormat.dynamoDBJson()` method to specify the `inputFormat` property.
+There are currently no options available.
+
+```ts
+import * as cdk from 'aws-cdk-lib';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+
+const app = new cdk.App();
+const stack = new cdk.Stack(app, 'Stack');
+
+declare const bucket: s3.IBucket;
+
+new dynamodb.Table(stack, 'Table', {
+  partitionKey: {
+    name: 'id',
+    type: dynamodb.AttributeType.STRING,
+  },
+  importSource: {
+    compressionType: dynamodb.InputCompressionType.GZIP,
+    inputFormat: dynamodb.InputFormat.dynamoDBJson(),
+    bucket,
+    keyPrefix: 'prefix',
+  },
+});
+```
+
+### use Amazon Ion format
+Use the `InputFormat.ion()` method to specify the `inputFormat` property.
+There are currently no options available.
+
+```ts
+import * as cdk from 'aws-cdk-lib';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+
+const app = new cdk.App();
+const stack = new cdk.Stack(app, 'Stack');
+
+declare const bucket: s3.IBucket;
+
+new dynamodb.Table(stack, 'Table', {
+  partitionKey: {
+    name: 'id',
+    type: dynamodb.AttributeType.STRING,
+  },
+  importSource: {
+    compressionType: dynamodb.InputCompressionType.GZIP,
+    inputFormat: dynamodb.InputFormat.ion(),
+    bucket,
+    keyPrefix: 'prefix',
+  },
 });
 ```

@@ -264,6 +264,20 @@ export class PrincipalWithConditions extends PrincipalAdapter {
     this.additionalConditions = conditions;
   }
 
+  public addToAssumeRolePolicy(doc: PolicyDocument) {
+    // Lazy import to avoid circular import dependencies during startup
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const adapter: typeof import('./private/policydoc-adapter') = require('./private/policydoc-adapter');
+
+    defaultAddPrincipalToAssumeRole(this.wrapped, new adapter.MutatingPolicyDocumentAdapter(doc, (statement) => {
+      // Avoid override of existing actions (see https://github.com/aws/aws-cdk/issues/28426)
+      statement.addActions(this.assumeRoleAction);
+      statement.addConditions(this.conditions);
+      return statement;
+    }));
+  }
+
   /**
    * Add a condition to the principal
    */
@@ -746,7 +760,7 @@ export class SamlConsolePrincipal extends SamlPrincipal {
     super(samlProvider, {
       ...conditions,
       StringEquals: {
-        'SAML:aud': cdk.Aws.PARTITION==='aws-cn'? 'https://signin.amazonaws.cn/saml': 'https://signin.aws.amazon.com/saml',
+        'SAML:aud': RegionInfo.get(samlProvider.stack.region).samlSignOnUrl ?? 'https://signin.aws.amazon.com/saml',
       },
     });
   }
@@ -825,7 +839,7 @@ export class StarPrincipal extends PrincipalBase {
  */
 export class CompositePrincipal extends PrincipalBase {
   public readonly assumeRoleAction: string;
-  private readonly principals = new Array<IPrincipal>();
+  private readonly _principals = new Array<IPrincipal>();
 
   constructor(...principals: IPrincipal[]) {
     super();
@@ -843,20 +857,20 @@ export class CompositePrincipal extends PrincipalBase {
    * @param principals IAM principals that will be added to the composite principal
    */
   public addPrincipals(...principals: IPrincipal[]): this {
-    this.principals.push(...principals);
+    this._principals.push(...principals);
     return this;
   }
 
   public addToAssumeRolePolicy(doc: PolicyDocument) {
-    for (const p of this.principals) {
+    for (const p of this._principals) {
       defaultAddPrincipalToAssumeRole(p, doc);
     }
   }
 
   public get policyFragment(): PrincipalPolicyFragment {
     // We only have a problem with conditions if we are trying to render composite
-    // princpals into a single statement (which is when `policyFragment` would get called)
-    for (const p of this.principals) {
+    // principals into a single statement (which is when `policyFragment` would get called)
+    for (const p of this._principals) {
       const fragment = p.policyFragment;
       if (fragment.conditions && Object.keys(fragment.conditions).length > 0) {
         throw new Error(
@@ -867,7 +881,7 @@ export class CompositePrincipal extends PrincipalBase {
 
     const principalJson: { [key: string]: string[] } = {};
 
-    for (const p of this.principals) {
+    for (const p of this._principals) {
       mergePrincipal(principalJson, p.policyFragment.principalJson);
     }
 
@@ -875,13 +889,20 @@ export class CompositePrincipal extends PrincipalBase {
   }
 
   public toString() {
-    return `CompositePrincipal(${this.principals})`;
+    return `CompositePrincipal(${this._principals})`;
   }
 
   public dedupeString(): string | undefined {
-    const inner = this.principals.map(ComparablePrincipal.dedupeStringFor);
+    const inner = this._principals.map(ComparablePrincipal.dedupeStringFor);
     if (inner.some(x => x === undefined)) { return undefined; }
     return `CompositePrincipal[${inner.join(',')}]`;
+  }
+
+  /**
+   * Returns the principals that make up the CompositePrincipal
+   */
+  public get principals(): IPrincipal[] {
+    return this._principals;
   }
 }
 

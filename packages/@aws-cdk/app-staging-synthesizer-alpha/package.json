@@ -48,7 +48,7 @@
     "watch": "cdk-watch",
     "lint": "cdk-lint",
     "test": "cdk-test",
-    "integ": "integ-runner",
+    "integ": "integ-runner --language javascript",
     "pkglint": "pkglint -f",
     "package": "cdk-package",
     "awslint": "cdk-awslint",
@@ -82,10 +82,6 @@
     "env": {
       "AWSLINT_BASE_CONSTRUCT": true
     }
-  },
-  "dependencies": {
-    "aws-cdk-lib": "0.0.0",
-    "constructs": "^10.0.0"
   },
   "devDependencies": {
     "aws-cdk-lib": "0.0.0",

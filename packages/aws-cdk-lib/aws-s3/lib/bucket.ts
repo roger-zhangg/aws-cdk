@@ -1,5 +1,4 @@
 import { EOL } from 'os';
-import * as path from 'path';
 import { Construct } from 'constructs';
 import { BucketPolicy } from './bucket-policy';
 import { IBucketNotificationDestination } from './destination';
@@ -13,7 +12,6 @@ import * as iam from '../../aws-iam';
 import * as kms from '../../aws-kms';
 import {
   CustomResource,
-  CustomResourceProvider,
   Duration,
   FeatureFlags,
   Fn,
@@ -27,9 +25,9 @@ import {
   Token,
   Tokenization,
   Annotations,
-  CustomResourceProviderRuntime,
 } from '../../core';
 import { CfnReference } from '../../core/lib/private/cfn-reference';
+import { AutoDeleteObjectsProvider } from '../../custom-resource-handlers/dist/aws-s3/auto-delete-objects-provider.generated';
 import * as cxapi from '../../cx-api';
 import * as regionInformation from '../../region-info';
 
@@ -184,7 +182,7 @@ export interface IBucket extends IResource {
    * of the bucket will also be granted to the same principal.
    *
    * @param identity The principal
-   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*')
+   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*'). Parameter type is `any` but `string` should be passed in.
    */
   grantRead(identity: iam.IGrantable, objectsKeyPattern?: any): iam.Grant;
 
@@ -203,7 +201,7 @@ export interface IBucket extends IResource {
    * use the `grantPutAcl` method.
    *
    * @param identity The principal
-   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*')
+   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*'). Parameter type is `any` but `string` should be passed in.
    * @param allowedActionPatterns Restrict the permissions to certain list of action patterns
    */
   grantWrite(identity: iam.IGrantable, objectsKeyPattern?: any, allowedActionPatterns?: string[]): iam.Grant;
@@ -214,7 +212,7 @@ export interface IBucket extends IResource {
    * If encryption is used, permission to use the key to encrypt the contents
    * of written files will also be granted to the same principal.
    * @param identity The principal
-   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*')
+   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*'). Parameter type is `any` but `string` should be passed in.
    */
   grantPut(identity: iam.IGrantable, objectsKeyPattern?: any): iam.Grant;
 
@@ -235,7 +233,7 @@ export interface IBucket extends IResource {
    * in this bucket.
    *
    * @param identity The principal
-   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*')
+   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*'). Parameter type is `any` but `string` should be passed in.
    */
   grantDelete(identity: iam.IGrantable, objectsKeyPattern?: any): iam.Grant;
 
@@ -255,7 +253,7 @@ export interface IBucket extends IResource {
    * use the `grantPutAcl` method.
    *
    * @param identity The principal
-   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*')
+   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*'). Parameter type is `any` but `string` should be passed in.
    */
   grantReadWrite(identity: iam.IGrantable, objectsKeyPattern?: any): iam.Grant;
 
@@ -359,7 +357,7 @@ export interface IBucket extends IResource {
    * @param dest The notification destination (see onEvent)
    * @param filters Filters (see onEvent)
    */
-  addObjectCreatedNotification(dest: IBucketNotificationDestination, ...filters: NotificationKeyFilter[]): void
+  addObjectCreatedNotification(dest: IBucketNotificationDestination, ...filters: NotificationKeyFilter[]): void;
 
   /**
    * Subscribes a destination to receive notifications when an object is
@@ -765,7 +763,7 @@ export abstract class BucketBase extends Resource implements IBucket {
    * of the bucket will also be granted to the same principal.
    *
    * @param identity The principal
-   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*')
+   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*'). Parameter type is `any` but `string` should be passed in.
    */
   public grantRead(identity: iam.IGrantable, objectsKeyPattern: any = '*') {
     return this.grant(identity, perms.BUCKET_READ_ACTIONS, perms.KEY_READ_ACTIONS,
@@ -786,7 +784,7 @@ export abstract class BucketBase extends Resource implements IBucket {
    * If encryption is used, permission to use the key to encrypt the contents
    * of written files will also be granted to the same principal.
    * @param identity The principal
-   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*')
+   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*'). Parameter type is `any` but `string` should be passed in.
    */
   public grantPut(identity: iam.IGrantable, objectsKeyPattern: any = '*') {
     return this.grant(identity, this.putActions, perms.KEY_WRITE_ACTIONS,
@@ -803,7 +801,7 @@ export abstract class BucketBase extends Resource implements IBucket {
    * in this bucket.
    *
    * @param identity The principal
-   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*')
+   * @param objectsKeyPattern Restrict the permission to a certain key pattern (default '*'). Parameter type is `any` but `string` should be passed in.
    */
   public grantDelete(identity: iam.IGrantable, objectsKeyPattern: any = '*') {
     return this.grant(identity, perms.BUCKET_DELETE_ACTIONS, [],
@@ -1179,7 +1177,7 @@ export enum InventoryFrequency {
   /**
    * A report is generated every Sunday (UTC timezone) after the initial report.
    */
-  WEEKLY = 'Weekly'
+  WEEKLY = 'Weekly',
 }
 
 /**
@@ -1250,6 +1248,7 @@ export interface Inventory {
   readonly enabled?: boolean;
   /**
    * The inventory configuration ID.
+   * Should be limited to 64 characters and can only contain letters, numbers, periods, dashes, and underscores.
    *
    * @default - generated ID.
    */
@@ -1288,7 +1287,9 @@ export enum ObjectOwnership {
    */
   BUCKET_OWNER_ENFORCED = 'BucketOwnerEnforced',
   /**
-   * Objects uploaded to the bucket change ownership to the bucket owner .
+   * The bucket owner will own the object if the object is uploaded with
+   * the bucket-owner-full-control canned ACL. Without this setting and
+   * canned ACL, the object is uploaded and remains owned by the uploading account.
    */
   BUCKET_OWNER_PREFERRED = 'BucketOwnerPreferred',
   /**
@@ -1335,6 +1336,68 @@ export interface IntelligentTieringConfiguration {
    * @default Objects will not move to Glacier Deep Access
    */
   readonly deepArchiveAccessTierTime?: Duration;
+}
+
+/**
+ * The date source for the partitioned prefix.
+ */
+export enum PartitionDateSource {
+  /**
+   * The year, month, and day will be based on the timestamp of the S3 event in the file that's been delivered.
+   */
+  EVENT_TIME = 'EventTime',
+
+  /**
+   * The year, month, and day will be based on the time when the log file was delivered to S3.
+   */
+  DELIVERY_TIME = 'DeliveryTime',
+}
+
+/**
+ * The key format for the log object.
+ */
+export abstract class TargetObjectKeyFormat {
+  /**
+   * Use partitioned prefix for log objects.
+   * If you do not specify the dateSource argument, the default is EventTime.
+   *
+   * The partitioned prefix format as follow:
+   * [DestinationPrefix][SourceAccountId]/​[SourceRegion]/​[SourceBucket]/​[YYYY]/​[MM]/​[DD]/​[YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]
+   */
+  public static partitionedPrefix(dateSource?: PartitionDateSource): TargetObjectKeyFormat {
+    return new class extends TargetObjectKeyFormat {
+      public _render(): CfnBucket.LoggingConfigurationProperty['targetObjectKeyFormat'] {
+        return {
+          partitionedPrefix: {
+            partitionDateSource: dateSource,
+          },
+        };
+      }
+    }();
+  }
+
+  /**
+   * Use the simple prefix for log objects.
+   *
+   * The simple prefix format as follow:
+   * [DestinationPrefix][YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]
+   */
+  public static simplePrefix(): TargetObjectKeyFormat {
+    return new class extends TargetObjectKeyFormat {
+      public _render(): CfnBucket.LoggingConfigurationProperty['targetObjectKeyFormat'] {
+        return {
+          simplePrefix: {},
+        };
+      }
+    }();
+  }
+
+  /**
+   * Render the log object key format.
+   *
+   * @internal
+   */
+  public abstract _render(): CfnBucket.LoggingConfigurationProperty['targetObjectKeyFormat'];
 }
 
 export interface BucketProps {
@@ -1544,6 +1607,13 @@ export interface BucketProps {
    * @default - No log file prefix
    */
   readonly serverAccessLogsPrefix?: string;
+
+  /**
+   * Optional key format for log objects.
+   *
+   * @default - the default key format is: [DestinationPrefix][YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]
+   */
+  readonly targetObjectKeyFormat?: TargetObjectKeyFormat;
 
   /**
    * The inventory configuration of the bucket.
@@ -2037,8 +2107,8 @@ export class Bucket extends BucketBase {
    * | S3_MANAGED       | k                   | e                      | ERROR!                          | ERROR!                       |
    */
   private parseEncryption(props: BucketProps): {
-    bucketEncryption?: CfnBucket.BucketEncryptionProperty,
-    encryptionKey?: kms.IKey
+    bucketEncryption?: CfnBucket.BucketEncryptionProperty;
+    encryptionKey?: kms.IKey;
   } {
 
     // default based on whether encryptionKey is specified
@@ -2214,6 +2284,7 @@ export class Bucket extends BucketBase {
     return {
       destinationBucketName: props.serverAccessLogsBucket?.bucketName,
       logFilePrefix: props.serverAccessLogsPrefix,
+      targetObjectKeyFormat: props.targetObjectKeyFormat?._render(),
     };
   }
 
@@ -2420,11 +2491,15 @@ export class Bucket extends BucketBase {
     if (!this.inventories || this.inventories.length === 0) {
       return undefined;
     }
+    const inventoryIdValidationRegex = /[^\w\.\-]/g;
 
     return this.inventories.map((inventory, index) => {
       const format = inventory.format ?? InventoryFormat.CSV;
       const frequency = inventory.frequency ?? InventoryFrequency.WEEKLY;
-      const id = inventory.inventoryId ?? `${this.node.id}Inventory${index}`;
+      if (inventory.inventoryId !== undefined && (inventory.inventoryId.length > 64 || inventoryIdValidationRegex.test(inventory.inventoryId))) {
+        throw new Error(`inventoryId should not exceed 64 characters and should not contain special characters except . and -, got ${inventory.inventoryId}`);
+      }
+      const id = inventory.inventoryId ?? `${this.node.id}Inventory${index}`.replace(inventoryIdValidationRegex, '').slice(-64);
 
       if (inventory.destination.bucket instanceof Bucket) {
         inventory.destination.bucket.addToResourcePolicy(new iam.PolicyStatement({
@@ -2461,10 +2536,8 @@ export class Bucket extends BucketBase {
   }
 
   private enableAutoDeleteObjects() {
-    const provider = CustomResourceProvider.getOrCreateProvider(this, AUTO_DELETE_OBJECTS_RESOURCE_TYPE, {
-      codeDirectory: path.join(__dirname, '..', '..', 'custom-resource-handlers', 'dist', 'aws-s3', 'auto-delete-objects-handler'),
+    const provider = AutoDeleteObjectsProvider.getOrCreateProvider(this, AUTO_DELETE_OBJECTS_RESOURCE_TYPE, {
       useCfnResponseWrapper: false,
-      runtime: CustomResourceProviderRuntime.NODEJS_18_X,
       description: `Lambda function for auto-deleting objects in ${this.bucketName} S3 bucket.`,
     });
 

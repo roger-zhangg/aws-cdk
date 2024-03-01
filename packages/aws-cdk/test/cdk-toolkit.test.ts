@@ -867,19 +867,13 @@ describe('synth', () => {
     const autoscalingTemplatePath = path.join(...templatePath, 'autoscaling-template.yml');
     const s3TemplatePath = path.join(...templatePath, 's3-template.json');
 
-    test('migrate fails when neither --from-path or --from-stack are provided', async () => {
-      const toolkit = defaultToolkitSetup();
-      await expect(() => toolkit.migrate({ stackName: 'no-source' })).rejects.toThrowError('Either `--from-path` or `--from-stack` must be used to provide the source of the CloudFormation template.');
-      expect(stderrMock.mock.calls[1][0]).toContain(' ❌  Migrate failed for `no-source`: Either `--from-path` or `--from-stack` must be used to provide the source of the CloudFormation template.');
-    });
-
     test('migrate fails when both --from-path and --from-stack are provided', async () => {
       const toolkit = defaultToolkitSetup();
       await expect(() => toolkit.migrate({
         stackName: 'no-source',
         fromPath: './here/template.yml',
         fromStack: true,
-      })).rejects.toThrowError('Only one of `--from-path` or `--from-stack` may be provided.');
+      })).rejects.toThrow('Only one of `--from-path` or `--from-stack` may be provided.');
       expect(stderrMock.mock.calls[1][0]).toContain(' ❌  Migrate failed for `no-source`: Only one of `--from-path` or `--from-stack` may be provided.');
     });
 
@@ -888,14 +882,14 @@ describe('synth', () => {
       await expect(() => toolkit.migrate({
         stackName: 'bad-local-source',
         fromPath: './here/template.yml',
-      })).rejects.toThrowError('\'./here/template.yml\' is not a valid path.');
+      })).rejects.toThrow('\'./here/template.yml\' is not a valid path.');
       expect(stderrMock.mock.calls[1][0]).toContain(' ❌  Migrate failed for `bad-local-source`: \'./here/template.yml\' is not a valid path.');
     });
 
     test('migrate fails when --from-stack is used and stack does not exist in account', async () => {
       const mockSdkProvider = new MockSdkProvider();
       mockSdkProvider.stubCloudFormation({
-        getTemplate(_request) {
+        describeStacks(_request) {
           throw new Error('Stack does not exist in this environment');
         },
       });

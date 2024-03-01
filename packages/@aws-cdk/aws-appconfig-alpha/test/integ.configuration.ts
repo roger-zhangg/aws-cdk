@@ -1,4 +1,13 @@
+import { IntegTest } from '@aws-cdk/integ-tests-alpha';
 import { App, Duration, Stack, RemovalPolicy, Fn, SecretValue } from 'aws-cdk-lib';
+import { Artifact, Pipeline } from 'aws-cdk-lib/aws-codepipeline';
+import { S3DeployAction, S3SourceAction } from 'aws-cdk-lib/aws-codepipeline-actions';
+import { Key } from 'aws-cdk-lib/aws-kms';
+import { Code, Function, Runtime } from 'aws-cdk-lib/aws-lambda';
+import { Bucket } from 'aws-cdk-lib/aws-s3';
+import * as s3Deployment from 'aws-cdk-lib/aws-s3-deployment';
+import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
+import { CfnDocument, StringParameter } from 'aws-cdk-lib/aws-ssm';
 import {
   Application,
   ConfigurationContent,
@@ -10,15 +19,6 @@ import {
   RolloutStrategy,
   SourcedConfiguration,
 } from '../lib';
-import { Key } from 'aws-cdk-lib/aws-kms';
-import { Code, Function, Runtime } from 'aws-cdk-lib/aws-lambda';
-import { Bucket } from 'aws-cdk-lib/aws-s3';
-import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
-import { CfnDocument, StringParameter } from 'aws-cdk-lib/aws-ssm';
-import * as s3Deployment from 'aws-cdk-lib/aws-s3-deployment';
-import { Artifact, Pipeline } from 'aws-cdk-lib/aws-codepipeline';
-import { S3DeployAction, S3SourceAction } from 'aws-cdk-lib/aws-codepipeline-actions';
-import { IntegTest } from '@aws-cdk/integ-tests-alpha';
 
 const SCHEMA_STR =
 `{
@@ -38,7 +38,7 @@ const stack = new Stack(app, 'aws-appconfig-configuration');
 
 // create application for config profile
 const appConfigApp = new Application(stack, 'MyAppConfig', {
-  name: 'AppForConfigTest',
+  applicationName: 'AppForConfigTest',
 });
 
 const deploymentStrategy = new DeploymentStrategy(stack, 'MyDeployStrategy', {
@@ -46,6 +46,12 @@ const deploymentStrategy = new DeploymentStrategy(stack, 'MyDeployStrategy', {
     growthFactor: 100,
     deploymentDuration: Duration.minutes(0),
   }),
+});
+
+// hosted config from file
+new HostedConfiguration(stack, 'MyHostedConfigFromFile', {
+  application: appConfigApp,
+  content: ConfigurationContent.fromFile('config.json'),
 });
 
 // create basic config profile and add config version
@@ -56,19 +62,31 @@ new HostedConfiguration(stack, 'MyHostedConfig', {
   deployTo: [hostedEnv],
   validators: [
     JsonSchemaValidator.fromInline(SCHEMA_STR),
-    // JsonSchemaValidator.fromAsset('/Users/chenjane/Documents/appconfig-l2-constructs/test/schema.json'),
+    JsonSchemaValidator.fromFile('schema.json'),
   ],
   deploymentStrategy,
 });
 
 // create basic config profile from add config version from file
 const hostedEnvFromJson = appConfigApp.addEnvironment('HostedEnvFromJson');
-new HostedConfiguration(stack, 'MyHostedConfigFromJson', {
+const config = new HostedConfiguration(stack, 'MyHostedConfigFromJson', {
   application: appConfigApp,
   content: ConfigurationContent.fromInlineText('This is the configuration content'),
   deployTo: [hostedEnvFromJson],
   deploymentStrategy,
 });
+
+const hostedEnvFromYaml = appConfigApp.addEnvironment('HostedEnvFromYaml');
+new HostedConfiguration(stack, 'MyHostedConfigFromYaml', {
+  application: appConfigApp,
+  content: ConfigurationContent.fromInlineYaml('This is the configuration content'),
+  deployTo: [hostedEnvFromYaml],
+  deploymentStrategy,
+});
+
+// verify a configuration can be deployed through the deploy method
+const envToDeployLater = appConfigApp.addEnvironment('EnvDeployLater');
+config.deploy(envToDeployLater);
 
 // ssm paramter as configuration source
 const func = new Function(stack, 'MyValidatorFunction', {
@@ -126,6 +144,7 @@ new SourcedConfiguration(stack, 'MyConfigFromDocument', {
 const bucketEnv = appConfigApp.addEnvironment('BucketEnv');
 const bucket = new Bucket(stack, 'MyBucket', {
   versioned: true,
+  removalPolicy: RemovalPolicy.DESTROY,
 });
 bucket.applyRemovalPolicy(RemovalPolicy.DESTROY);
 const deployment = new s3Deployment.BucketDeployment(stack, 'DeployConfigInBucket', {
@@ -180,6 +199,7 @@ const deployAction = new S3DeployAction({
   extract: true,
 });
 const pipeline = new Pipeline(stack, 'MyPipeline', {
+  crossAccountKeys: true,
   stages: [
     {
       stageName: 'beta',
@@ -195,6 +215,10 @@ new SourcedConfiguration(stack, 'MyConfigFromPipeline', {
   application: appConfigApp,
   location: ConfigurationSource.fromPipeline(pipeline),
 });
+
+/* resource deployment alone is sufficient because we already have the
+   corresponding resource handler tests to assert that resources can be
+   used after created */
 
 new IntegTest(app, 'appconfig-configuration', {
   testCases: [stack],

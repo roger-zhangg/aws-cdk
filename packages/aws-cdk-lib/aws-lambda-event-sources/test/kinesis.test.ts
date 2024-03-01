@@ -2,6 +2,7 @@ import { TestFunction } from './test-function';
 import { Template } from '../../assertions';
 import * as kinesis from '../../aws-kinesis';
 import * as lambda from '../../aws-lambda';
+import { Bucket } from '../../aws-s3';
 import * as cdk from '../../core';
 import * as sources from '../lib';
 
@@ -326,4 +327,27 @@ describe('KinesisEventSource', () => {
       MaximumRecordAgeInSeconds: -1,
     });
   });
+
+  test('S3 onFailure Destination raise unsupport error', () => {
+    // GIVEN
+    const stack = new cdk.Stack();
+    const testLambdaFunction = new TestFunction(stack, 'Fn');
+
+    const stream = new kinesis.Stream(stack, 'S');
+
+    const bucket = Bucket.fromBucketName(stack, 'BucketByName', 'my-bucket');
+    const s3OnFailureDestination = new sources.S3OnFailureDestination(bucket);
+
+    expect(() => {
+      // WHEN
+      testLambdaFunction.addEventSource(new sources.KinesisEventSource(stream, {
+        startingPosition: lambda.StartingPosition.AT_TIMESTAMP,
+        startingPositionTimestamp: 1640995200,
+        onFailure: s3OnFailureDestination,
+      }));
+    //THEN
+    }).toThrowError('S3 onFailure Destination is not supported for this event source');
+
+  });
+
 });

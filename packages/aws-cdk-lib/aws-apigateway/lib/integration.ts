@@ -48,7 +48,7 @@ export interface IntegrationOptions {
    * There are three valid values: WHEN_NO_MATCH, WHEN_NO_TEMPLATES, and
    * NEVER.
    */
-  readonly passthroughBehavior?: PassthroughBehavior
+  readonly passthroughBehavior?: PassthroughBehavior;
 
   /**
    * The request parameters that API Gateway sends with the backend request.
@@ -167,6 +167,8 @@ export interface IntegrationConfig {
 
   /**
    * The integration's HTTP method type.
+   * Required unless you use a MOCK integration.
+   *
    * @default - no integration method specified.
    */
   readonly integrationHttpMethod?: string;
@@ -204,6 +206,10 @@ export class Integration {
 
     if (options.timeout && !options.timeout.isUnresolved() && (options.timeout.toMilliseconds() < 50 || options.timeout.toMilliseconds() > 29000)) {
       throw new Error('Integration timeout must be between 50 milliseconds and 29 seconds.');
+    }
+
+    if (props.type !== IntegrationType.MOCK && !props.integrationHttpMethod) {
+      throw new Error('integrationHttpMethod is required for non-mock integration types.');
     }
   }
 
@@ -254,7 +260,7 @@ export enum ContentHandling {
   /**
    * Converts a request payload from a binary blob to a base64-encoded string.
    */
-  CONVERT_TO_TEXT = 'CONVERT_TO_TEXT'
+  CONVERT_TO_TEXT = 'CONVERT_TO_TEXT',
 }
 
 export enum IntegrationType {
@@ -292,7 +298,7 @@ export enum IntegrationType {
    * For integrating the API method request with API Gateway as a "loop-back"
    * endpoint without invoking any backend.
    */
-  MOCK = 'MOCK'
+  MOCK = 'MOCK',
 }
 
 export enum PassthroughBehavior {
@@ -313,7 +319,7 @@ export enum PassthroughBehavior {
    * templates. However if there is at least one content type defined,
    * unmapped content types will be rejected with the same 415 response.
    */
-  WHEN_NO_TEMPLATES = 'WHEN_NO_TEMPLATES'
+  WHEN_NO_TEMPLATES = 'WHEN_NO_TEMPLATES',
 }
 
 export enum ConnectionType {
@@ -325,7 +331,7 @@ export enum ConnectionType {
   /**
    * For private connections between API Gateway and a network load balancer in a VPC
    */
-  VPC_LINK = 'VPC_LINK'
+  VPC_LINK = 'VPC_LINK',
 }
 
 export interface IntegrationResponse {

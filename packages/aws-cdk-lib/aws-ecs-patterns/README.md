@@ -60,6 +60,8 @@ You can omit `cluster` and `vpc` to let CDK create a new VPC with two AZs and cr
 
 You can customize the health check for your target group; otherwise it defaults to `HTTP` over port `80` hitting path `/`.
 
+You can customize the health check configuration of the container via the [`healthCheck`](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_ecs.HealthCheck.html) property; otherwise it defaults to the health check configuration from the container.
+
 Fargate services will use the `LATEST` platform version by default, but you can override by providing a value for the `platformVersion` property in the constructor.
 
 Fargate services use the default VPC Security Group unless one or more are provided using the `securityGroups` property in the constructor.
@@ -294,6 +296,45 @@ const queueProcessingFargateService = new ecsPatterns.QueueProcessingFargateServ
 ```
 
 when queue not provided by user, CDK will create a primary queue and a dead letter queue with default redrive policy and attach permission to the task to be able to access the primary queue.
+
+NOTE: `QueueProcessingFargateService` adds a CPU Based scaling strategy by default. You can turn this off by setting `disableCpuBasedScaling: true`.
+
+```ts
+declare const cluster: ecs.Cluster;
+const queueProcessingFargateService = new ecsPatterns.QueueProcessingFargateService(this, 'Service', {
+  cluster,
+  memoryLimitMiB: 512,
+  image: ecs.ContainerImage.fromRegistry('test'),
+  command: ["-c", "4", "amazon.com"],
+  enableLogging: false,
+  desiredTaskCount: 2,
+  environment: {
+    TEST_ENVIRONMENT_VARIABLE1: "test environment variable 1 value",
+    TEST_ENVIRONMENT_VARIABLE2: "test environment variable 2 value",
+  },
+  maxScalingCapacity: 5,
+  containerName: 'test',
+  disableCpuBasedScaling: true,
+});
+```
+
+To specify a custom target CPU utilization percentage for the scaling strategy use the  `cpuTargetUtilizationPercent` property:
+
+```ts
+declare const cluster: ecs.Cluster;
+const queueProcessingFargateService = new ecsPatterns.QueueProcessingFargateService(this, 'Service', {
+  cluster,
+  memoryLimitMiB: 512,
+  image: ecs.ContainerImage.fromRegistry('test'),
+  command: ["-c", "4", "amazon.com"],
+  enableLogging: false,
+  desiredTaskCount: 2,
+  environment: {},
+  maxScalingCapacity: 5,
+  containerName: 'test',
+  cpuTargetUtilizationPercent: 90,
+});
+```
 
 ## Scheduled Tasks
 
@@ -540,6 +581,22 @@ const queueProcessingFargateService = new ecsPatterns.QueueProcessingFargateServ
   maxReceiveCount: 42,
   retentionPeriod: Duration.days(7),
   visibilityTimeout: Duration.minutes(5),
+});
+```
+
+### Set cooldown for QueueProcessingFargateService
+
+The cooldown period is the amount of time to wait for a previous scaling activity to take effect.
+To specify something other than the default cooldown period of 300 seconds, use the `cooldown` parameter: 
+
+```ts
+declare const vpc: ec2.Vpc;
+const queueProcessingFargateService = new ecsPatterns.QueueProcessingFargateService(this, 'Service', {
+  vpc,
+  memoryLimitMiB: 512,
+  image: ecs.ContainerImage.fromRegistry('test'),
+  assignPublicIp: true,
+  cooldown: Duration.seconds(500),
 });
 ```
 

@@ -1,8 +1,8 @@
+import { IntegTest } from '@aws-cdk/integ-tests-alpha';
 import { Stack, App, Duration } from 'aws-cdk-lib';
 import { EventBus } from 'aws-cdk-lib/aws-events';
 import { Code, Function, Runtime } from 'aws-cdk-lib/aws-lambda';
 import { Topic } from 'aws-cdk-lib/aws-sns';
-import { IntegTest } from '@aws-cdk/integ-tests-alpha';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import {
   DeploymentStrategy,
@@ -31,7 +31,7 @@ const lambda = new Function(stack, 'MyFunction', {
   code: Code.fromInline('def handler(event, context):\n\tprint(\'The function has been invoked.\')'),
 });
 const app = new Application(stack, 'MyApplication', {
-  name: 'AppForExtensionTest',
+  applicationName: 'AppForExtensionTest',
 });
 const lambdaExtension = new Extension(stack, 'MyLambdaExtension', {
   actions: [
@@ -41,7 +41,6 @@ const lambdaExtension = new Extension(stack, 'MyLambdaExtension', {
         ActionPoint.ON_DEPLOYMENT_START,
       ],
       eventDestination: new LambdaDestination(lambda),
-      invokeWithoutExecutionRole: true,
     }),
   ],
 });
@@ -56,7 +55,6 @@ const queueExtension = new Extension(stack, 'MyQueueExtension', {
         ActionPoint.ON_DEPLOYMENT_START,
       ],
       eventDestination: new SqsDestination(queue),
-      invokeWithoutExecutionRole: true,
     }),
   ],
 });
@@ -71,7 +69,6 @@ const topicExtension = new Extension(stack, 'MyTopicExtension', {
         ActionPoint.ON_DEPLOYMENT_START,
       ],
       eventDestination: new SnsDestination(topic),
-      invokeWithoutExecutionRole: true,
     }),
   ],
 });
@@ -88,7 +85,6 @@ const busExtension = new Extension(stack, 'MyEventBusExtension', {
       eventDestination: new EventBridgeDestination(bus),
       description: 'My event bus action',
       name: 'MyEventBusPreHostedConfigVersionAction',
-      invokeWithoutExecutionRole: true,
     }),
   ],
   parameters: [
@@ -112,6 +108,10 @@ const hostedConfig = new HostedConfiguration(stack, 'HostedConfiguration', {
   }),
 });
 hostedConfig.node.addDependency(lambdaExtension, topicExtension, busExtension, queueExtension);
+
+/* resource deployment alone is sufficient because we already have the
+   corresponding resource handler tests to assert that resources can be
+   used after created */
 
 new IntegTest(app, 'appconfig-extension', {
   testCases: [stack],

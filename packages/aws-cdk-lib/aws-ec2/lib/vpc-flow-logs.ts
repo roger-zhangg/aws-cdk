@@ -41,7 +41,7 @@ export enum FlowLogTrafficType {
   /**
    * Only log rejects
    */
-  REJECT = 'REJECT'
+  REJECT = 'REJECT',
 }
 
 /**
@@ -56,7 +56,12 @@ export enum FlowLogDestinationType {
   /**
    * Send flow logs to S3 Bucket
    */
-  S3 = 's3'
+  S3 = 's3',
+
+  /**
+   * Send flow logs to Kinesis Data Firehose
+   */
+  KINESIS_DATA_FIREHOSE = 'kinesis-data-firehose',
 }
 
 /**
@@ -92,6 +97,26 @@ export abstract class FlowLogResourceType {
       resourceId: id,
     };
   }
+
+  /**
+   * The Transit Gateway to attach the Flow Log to
+   */
+  public static fromTransitGatewayId(id: string): FlowLogResourceType {
+    return {
+      resourceType: 'TransitGateway',
+      resourceId: id,
+    };
+  };
+
+  /**
+   * The Transit Gateway Attachment to attach the Flow Log to
+   */
+  public static fromTransitGatewayAttachmentId(id: string): FlowLogResourceType {
+    return {
+      resourceType: 'TransitGatewayAttachment',
+      resourceId: id,
+    };
+  };
 
   /**
    * The type of resource to attach a flow log to.
@@ -189,6 +214,18 @@ export abstract class FlowLogDestination {
   }
 
   /**
+   * Use Kinesis Data Firehose as the destination
+   *
+   * @param deliveryStreamArn the ARN of Kinesis Data Firehose delivery stream to publish logs to
+   */
+  public static toKinesisDataFirehoseDestination(deliveryStreamArn: string): FlowLogDestination {
+    return new KinesisDataFirehoseDestination({
+      logDestinationType: FlowLogDestinationType.KINESIS_DATA_FIREHOSE,
+      deliveryStreamArn,
+    });
+  }
+
+  /**
    * Generates a flow log destination configuration
    */
   public abstract bind(scope: Construct, flowLog: FlowLog): FlowLogDestinationConfig;
@@ -232,6 +269,13 @@ export interface FlowLogDestinationConfig {
    * @default - undefined
    */
   readonly keyPrefix?: string;
+
+  /**
+   * The ARN of Kinesis Data Firehose delivery stream to publish the flow logs to
+   *
+   * @default - undefined
+   */
+  readonly deliveryStreamArn?: string;
 
   /**
    * Options for writing flow logs to a supported destination
@@ -381,6 +425,27 @@ class CloudWatchLogsDestination extends FlowLogDestination {
       logDestinationType: FlowLogDestinationType.CLOUD_WATCH_LOGS,
       logGroup,
       iamRole,
+    };
+  }
+}
+
+/**
+ *
+ */
+class KinesisDataFirehoseDestination extends FlowLogDestination {
+  constructor(private readonly props: FlowLogDestinationConfig) {
+    super();
+  }
+
+  public bind(_scope: Construct, _flowLog: FlowLog): FlowLogDestinationConfig {
+    if (this.props.deliveryStreamArn === undefined) {
+      throw new Error('deliveryStreamArn is required');
+    }
+    const deliveryStreamArn = this.props.deliveryStreamArn;
+
+    return {
+      logDestinationType: FlowLogDestinationType.KINESIS_DATA_FIREHOSE,
+      deliveryStreamArn,
     };
   }
 }
@@ -614,6 +679,9 @@ export class LogFormat {
 export interface FlowLogOptions {
   /**
    * The type of traffic to log. You can log traffic that the resource accepts or rejects, or all traffic.
+   * When the target is either `TransitGateway` or `TransitGatewayAttachment`, setting the traffic type is not possible.
+   *
+   * @see https://docs.aws.amazon.com/vpc/latest/tgw/working-with-flow-logs.html
    *
    * @default ALL
    */
@@ -643,7 +711,12 @@ export interface FlowLogOptions {
    * The maximum interval of time during which a flow of packets is captured
    * and aggregated into a flow log record.
    *
-   * @default FlowLogMaxAggregationInterval.TEN_MINUTES
+   * When creating flow logs for a Transit Gateway or Transit Gateway Attachment,
+   * this property must be ONE_MINUTES.
+   *
+   * @see https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-flowlog.html#cfn-ec2-flowlog-maxaggregationinterval
+   *
+   * @default - FlowLogMaxAggregationInterval.ONE_MINUTES if creating flow logs for Transit Gateway, otherwise FlowLogMaxAggregationInterval.TEN_MINUTES.
    */
   readonly maxAggregationInterval?: FlowLogMaxAggregationInterval;
 }
@@ -722,6 +795,11 @@ export class FlowLog extends FlowLogBase {
    */
   public readonly logGroup?: logs.ILogGroup;
 
+  /**
+   * The ARN of the Kinesis Data Firehose delivery stream to publish flow logs to
+   */
+  public readonly deliveryStreamArn?: string;
+
   constructor(scope: Construct, id: string, props: FlowLogProps) {
     super(scope, id);
 
@@ -732,6 +810,7 @@ export class FlowLog extends FlowLogBase {
     this.bucket = destinationConfig.s3Bucket;
     this.iamRole = destinationConfig.iamRole;
     this.keyPrefix = destinationConfig.keyPrefix;
+    this.deliveryStreamArn = destinationConfig.deliveryStreamArn;
 
     Tags.of(this).add(NAME_TAG, props.flowLogName || this.node.path);
 
@@ -739,11 +818,25 @@ export class FlowLog extends FlowLogBase {
     if (this.bucket) {
       logDestination = this.keyPrefix ? this.bucket.arnForObjects(this.keyPrefix) : this.bucket.bucketArn;
     }
+    if (this.deliveryStreamArn) {
+      logDestination = this.deliveryStreamArn;
+    }
     let customLogFormat: string | undefined = undefined;
     if (props.logFormat) {
       customLogFormat = props.logFormat.map(elm => {
         return elm.value;
       }).join(' ');
+    }
+
+    let trafficType: FlowLogTrafficType | undefined = props.trafficType ?? FlowLogTrafficType.ALL;
+    if (props.resourceType.resourceType === 'TransitGateway' || props.resourceType.resourceType === 'TransitGatewayAttachment') {
+      if (props.trafficType) {
+        throw new Error('trafficType is not supported for Transit Gateway and Transit Gateway Attachment');
+      }
+      if (props.maxAggregationInterval && props.maxAggregationInterval !== FlowLogMaxAggregationInterval.ONE_MINUTE) {
+        throw new Error('maxAggregationInterval must be set to ONE_MINUTE for Transit Gateway and Transit Gateway Attachment');
+      }
+      trafficType = undefined;
     }
 
     const flowLog = new CfnFlowLog(this, 'FlowLog', {
@@ -754,9 +847,7 @@ export class FlowLog extends FlowLogBase {
       maxAggregationInterval: props.maxAggregationInterval,
       resourceId: props.resourceType.resourceId,
       resourceType: props.resourceType.resourceType,
-      trafficType: props.trafficType
-        ? props.trafficType
-        : FlowLogTrafficType.ALL,
+      trafficType,
       logFormat: customLogFormat,
       logDestination,
     });

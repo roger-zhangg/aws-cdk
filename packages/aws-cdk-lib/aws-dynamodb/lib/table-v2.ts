@@ -11,7 +11,7 @@ import {
 import { TableBaseV2, ITableV2 } from './table-v2-base';
 import { IStream } from '../../aws-kinesis';
 import { IKey, Key } from '../../aws-kms';
-import { ArnFormat, Lazy, PhysicalName, RemovalPolicy, Stack, Token } from '../../core';
+import { ArnFormat, CfnTag, Lazy, PhysicalName, RemovalPolicy, Stack, Token } from '../../core';
 
 const HASH_KEY_TYPE = 'HASH';
 const RANGE_KEY_TYPE = 'RANGE';
@@ -114,6 +114,13 @@ export interface TableOptionsV2 {
    * @default - no Kinesis Data Stream
    */
   readonly kinesisStream?: IStream;
+
+  /**
+   * Tags to be applied to the table or replica table
+   *
+   * @default - no tags
+   */
+  readonly tags?: CfnTag[];
 }
 
 /**
@@ -180,7 +187,7 @@ export interface TablePropsV2 extends TableOptionsV2 {
    * not specified. If this property is not specified when replicas are configured, then
    * NEW_AND_OLD_IMAGES will be the StreamViewType for all replicas
    */
-  readonly dynamoStream?: StreamViewType
+  readonly dynamoStream?: StreamViewType;
 
   /**
    * The removal policy applied to the table.
@@ -267,7 +274,7 @@ export interface TableAttributesV2 {
    *
    * @default - no table stream ARN
    */
-  readonly tableStreamArn?: string
+  readonly tableStreamArn?: string;
 
   /**
    * KMS encryption key for the table.
@@ -294,7 +301,7 @@ export interface TableAttributesV2 {
    *
    * @default - no local indexes
    */
-  readonly localIndexes?: string[]
+  readonly localIndexes?: string[];
 
   /**
    * Whether or not to grant permissions for all indexes of the table.
@@ -612,6 +619,7 @@ export class TableV2 extends TableBaseV2 {
       readProvisionedThroughputSettings: props.readCapacity
         ? props.readCapacity._renderReadCapacity()
         : this.readProvisioning,
+      tags: props.tags,
     };
   }
 
@@ -716,6 +724,7 @@ export class TableV2 extends TableBaseV2 {
     replicaTables.push(this.configureReplicaTable({
       region: this.stack.region,
       kinesisStream: this.tableOptions.kinesisStream,
+      tags: this.tableOptions.tags,
     }));
 
     return replicaTables;

@@ -15,7 +15,7 @@ module.exports = {
   parserOptions: {
     ecmaVersion: '2018',
     sourceType: 'module',
-    project: './tsconfig.json',
+    project: __dirname + '/tsconfig.json',
   },
   extends: [
     'plugin:import/typescript',
@@ -35,7 +35,6 @@ module.exports = {
   ignorePatterns: ['*.js', '*.d.ts', 'node_modules/', '*.generated.ts'],
   rules: {
     '@aws-cdk/no-core-construct': ['error'],
-    '@aws-cdk/no-qualified-construct': ['error'],
     '@aws-cdk/invalid-cfn-imports': ['error'],
     // Require use of the `import { foo } from 'bar';` form instead of `import foo = require('bar');`
     '@typescript-eslint/no-require-imports': ['error'],

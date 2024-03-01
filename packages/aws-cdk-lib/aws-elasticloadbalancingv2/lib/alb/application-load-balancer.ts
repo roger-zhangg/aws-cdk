@@ -25,9 +25,7 @@ export interface ApplicationLoadBalancerProps extends BaseLoadBalancerProps {
   /**
    * The type of IP addresses to use
    *
-   * Only applies to application load balancers.
-   *
-   * @default IpAddressType.Ipv4
+   * @default IpAddressType.IPV4
    */
   readonly ipAddressType?: IpAddressType;
 
@@ -618,7 +616,7 @@ export enum HttpCodeTarget {
   /**
    * The number of 5xx response codes from targets
    */
-  TARGET_5XX_COUNT = 'HTTPCode_Target_5XX_Count'
+  TARGET_5XX_COUNT = 'HTTPCode_Target_5XX_Count',
 }
 
 /**

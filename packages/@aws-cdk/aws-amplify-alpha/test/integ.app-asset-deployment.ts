@@ -10,7 +10,7 @@ class TestStack extends Stack {
     super(scope, id, props);
 
     const asset = new Asset(this, 'SampleAsset', {
-      path: path.join(__dirname, './test-asset'),
+      path: path.join(__dirname, 'test-asset'),
     });
 
     const amplifyApp = new amplify.App(this, 'App', {});
@@ -26,4 +26,5 @@ const stack = new TestStack(app, 'cdk-amplify-app-asset-deployment');
 // On updating the asset file and re-deploying it updates the existing Amplify app with the new change.
 new IntegTest(app, 'cdk-amplify-app-integ-test', {
   testCases: [stack],
+  diffAssets: true,
 });

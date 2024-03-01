@@ -327,6 +327,13 @@ export abstract class RestApiBase extends Resource implements IRestApi {
   }
 
   /**
+   * The deployed root URL of this REST API.
+   */
+  public get url() {
+    return this.urlForPath();
+  }
+
+  /**
    * The ID of this API Gateway RestApi.
    */
   public abstract readonly restApiId: string;
@@ -838,13 +845,6 @@ export class RestApi extends RestApiBase {
   }
 
   /**
-   * The deployed root URL of this REST API.
-   */
-  public get url() {
-    return this.urlForPath();
-  }
-
-  /**
    * Adds a new model.
    */
   public addModel(id: string, props: ModelOptions): Model {
@@ -956,7 +956,7 @@ export enum EndpointType {
   /**
    * For a private API and its custom domain name.
    */
-  PRIVATE = 'PRIVATE'
+  PRIVATE = 'PRIVATE',
 }
 
 class RootResource extends ResourceBase {

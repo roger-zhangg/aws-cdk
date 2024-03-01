@@ -62,6 +62,9 @@ Flags come in three types:
 | [@aws-cdk/aws-appsync:useArnForSourceApiAssociationIdentifier](#aws-cdkaws-appsyncusearnforsourceapiassociationidentifier) | When enabled, will always use the arn for identifiers for CfnSourceApiAssociation in the GraphqlApi construct rather than id. | 2.97.0 | (fix) |
 | [@aws-cdk/aws-rds:auroraClusterChangeScopeOfInstanceParameterGroupWithEachParameters](#aws-cdkaws-rdsauroraclusterchangescopeofinstanceparametergroupwitheachparameters) | When enabled, a scope of InstanceParameterGroup for AuroraClusterInstance with each parameters will change. | 2.97.0 | (fix) |
 | [@aws-cdk/aws-rds:preventRenderingDeprecatedCredentials](#aws-cdkaws-rdspreventrenderingdeprecatedcredentials) | When enabled, creating an RDS database cluster from a snapshot will only render credentials for snapshot credentials. | 2.98.0 | (fix) |
+| [@aws-cdk/aws-codepipeline-actions:useNewDefaultBranchForCodeCommitSource](#aws-cdkaws-codepipeline-actionsusenewdefaultbranchforcodecommitsource) | When enabled, the CodeCommit source action is using the default branch name 'main'. | 2.103.1 | (fix) |
+| [@aws-cdk/aws-cloudwatch-actions:changeLambdaPermissionLogicalIdForLambdaAction](#aws-cdkaws-cloudwatch-actionschangelambdapermissionlogicalidforlambdaaction) | When enabled, the logical ID of a Lambda permission for a Lambda action includes an alarm ID. | 2.124.0 | (fix) |
+| [@aws-cdk/aws-codepipeline:crossAccountKeysDefaultValueToFalse](#aws-cdkaws-codepipelinecrossaccountkeysdefaultvaluetofalse) | Enables Pipeline to set the default value for crossAccountKeys to false. | 2.127.0 | (default) |
 
 <!-- END table -->
 
@@ -114,7 +117,10 @@ The following json shows the current recommended set of flags, as `cdk init` wou
     "@aws-cdk/aws-efs:mountTargetOrderInsensitiveLogicalId": true,
     "@aws-cdk/aws-rds:auroraClusterChangeScopeOfInstanceParameterGroupWithEachParameters": true,
     "@aws-cdk/aws-appsync:useArnForSourceApiAssociationIdentifier": true,
-    "@aws-cdk/aws-rds:preventRenderingDeprecatedCredentials": true
+    "@aws-cdk/aws-rds:preventRenderingDeprecatedCredentials": true,
+    "@aws-cdk/aws-codepipeline-actions:useNewDefaultBranchForCodeCommitSource": true,
+    "@aws-cdk/aws-cloudwatch-actions:changeLambdaPermissionLogicalIdForLambdaAction": true,
+    "@aws-cdk/aws-codepipeline:crossAccountKeysDefaultValueToFalse": true
   }
 }
 ```
@@ -1174,6 +1180,55 @@ database cluster from a snapshot.
 | ----- | ----- | ----- |
 | (not in v1) |  |  |
 | 2.98.0 | `false` | `true` |
+
+
+### @aws-cdk/aws-codepipeline-actions:useNewDefaultBranchForCodeCommitSource
+
+*When enabled, the CodeCommit source action is using the default branch name 'main'.* (fix)
+
+When setting up a CodeCommit source action for the source stage of a pipeline, please note that the 
+default branch is 'master'.
+However, with the activation of this feature flag, the default branch is updated to 'main'.
+
+
+| Since | Default | Recommended |
+| ----- | ----- | ----- |
+| (not in v1) |  |  |
+| 2.103.1 | `false` | `true` |
+
+
+### @aws-cdk/aws-cloudwatch-actions:changeLambdaPermissionLogicalIdForLambdaAction
+
+*When enabled, the logical ID of a Lambda permission for a Lambda action includes an alarm ID.* (fix)
+
+When this feature flag is enabled, a logical ID of `LambdaPermission` for a
+`LambdaAction` will include an alarm ID. Therefore multiple alarms for the same Lambda
+can be created with `LambdaAction`.
+
+If the flag is set to false then it can only make one alarm for the Lambda with
+`LambdaAction`.
+
+
+| Since | Default | Recommended |
+| ----- | ----- | ----- |
+| (not in v1) |  |  |
+| 2.124.0 | `false` | `true` |
+
+
+### @aws-cdk/aws-codepipeline:crossAccountKeysDefaultValueToFalse
+
+*Enables Pipeline to set the default value for crossAccountKeys to false.* (default)
+
+When this feature flag is enabled, and the `crossAccountKeys` property is not provided in a `Pipeline`
+construct, the construct automatically defaults the value of this property to false.
+
+
+| Since | Default | Recommended |
+| ----- | ----- | ----- |
+| (not in v1) |  |  |
+| 2.127.0 | `false` | `true` |
+
+**Compatibility with old behavior:** Pass `crossAccountKeys: true` to `Pipeline` construct to restore the previous behavior.
 
 
 <!-- END details -->

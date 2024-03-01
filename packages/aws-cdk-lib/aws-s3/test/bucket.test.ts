@@ -1400,7 +1400,6 @@ describe('bucket', () => {
               'Action': [
                 's3:GetObject*',
                 's3:GetBucket*',
-                's3:HeadObject',
                 's3:List*',
               ],
               'Resource': [{
@@ -1540,7 +1539,6 @@ describe('bucket', () => {
                   'Action': [
                     's3:GetObject*',
                     's3:GetBucket*',
-                    's3:HeadObject',
                     's3:List*',
                   ],
                   'Effect': 'Allow',
@@ -1613,7 +1611,6 @@ describe('bucket', () => {
                     'Action': [
                       's3:GetObject*',
                       's3:GetBucket*',
-                      's3:HeadObject',
                       's3:List*',
                       's3:DeleteObject*',
                       's3:PutObject',
@@ -1676,7 +1673,7 @@ describe('bucket', () => {
           'Version': '2012-10-17',
           'Statement': [
             {
-              'Action': ['s3:GetObject*', 's3:GetBucket*', 's3:HeadObject', 's3:List*'],
+              'Action': ['s3:GetObject*', 's3:GetBucket*', 's3:List*'],
               'Condition': { 'StringEquals': { 'aws:PrincipalOrgID': 'o-1234' } },
               'Effect': 'Allow',
               'Principal': { AWS: '*' },
@@ -1720,7 +1717,6 @@ describe('bucket', () => {
               'Action': [
                 's3:GetObject*',
                 's3:GetBucket*',
-                's3:HeadObject',
                 's3:List*',
                 's3:DeleteObject*',
                 's3:PutObject',
@@ -2044,7 +2040,6 @@ describe('bucket', () => {
                     'Action': [
                       's3:GetObject*',
                       's3:GetBucket*',
-                      's3:HeadObject',
                       's3:List*',
                     ],
                     'Effect': 'Allow',
@@ -2104,7 +2099,6 @@ describe('bucket', () => {
               'Action': [
                 's3:GetObject*',
                 's3:GetBucket*',
-                's3:HeadObject',
                 's3:List*',
               ],
               'Effect': 'Allow',
@@ -2134,7 +2128,6 @@ describe('bucket', () => {
               'Action': [
                 's3:GetObject*',
                 's3:GetBucket*',
-                's3:HeadObject',
                 's3:List*',
               ],
               'Effect': 'Allow',
@@ -2865,6 +2858,7 @@ describe('bucket', () => {
         DestinationBucketName: {
           Ref: 'AccessLogs8B620ECA',
         },
+        TargetObjectKeyFormat: Match.absent(),
       },
     });
   });
@@ -2887,6 +2881,7 @@ describe('bucket', () => {
           Ref: 'AccessLogs8B620ECA',
         },
         LogFilePrefix: 'hello',
+        TargetObjectKeyFormat: Match.absent(),
       },
     });
   });
@@ -2903,6 +2898,76 @@ describe('bucket', () => {
     Template.fromStack(stack).hasResourceProperties('AWS::S3::Bucket', {
       LoggingConfiguration: {
         LogFilePrefix: 'hello',
+        TargetObjectKeyFormat: Match.absent(),
+      },
+    });
+  });
+
+  test('Use simple prefix for log objects', () => {
+    // GIVEN
+    const stack = new cdk.Stack();
+
+    // WHEN
+    const accessLogBucket = new s3.Bucket(stack, 'AccessLogs');
+    new s3.Bucket(stack, 'MyBucket', {
+      serverAccessLogsBucket: accessLogBucket,
+      targetObjectKeyFormat: s3.TargetObjectKeyFormat.simplePrefix(),
+    });
+
+    // THEN
+    Template.fromStack(stack).hasResourceProperties('AWS::S3::Bucket', {
+      LoggingConfiguration: {
+        DestinationBucketName: {
+          Ref: 'AccessLogs8B620ECA',
+        },
+        TargetObjectKeyFormat: {
+          SimplePrefix: {},
+          PartitionedPrefix: Match.absent(),
+        },
+      },
+    });
+  });
+
+  test('Use partitioned prefix for log objects', () => {
+    // GIVEN
+    const stack = new cdk.Stack();
+
+    // WHEN
+    const accessLogBucket = new s3.Bucket(stack, 'AccessLogs');
+    new s3.Bucket(stack, 'MyBucket', {
+      serverAccessLogsBucket: accessLogBucket,
+      targetObjectKeyFormat: s3.TargetObjectKeyFormat.partitionedPrefix(s3.PartitionDateSource.EVENT_TIME),
+    });
+    new s3.Bucket(stack, 'MyBucket2', {
+      serverAccessLogsBucket: accessLogBucket,
+      targetObjectKeyFormat: s3.TargetObjectKeyFormat.partitionedPrefix(s3.PartitionDateSource.DELIVERY_TIME),
+    });
+
+    // THEN
+    Template.fromStack(stack).hasResourceProperties('AWS::S3::Bucket', {
+      LoggingConfiguration: {
+        DestinationBucketName: {
+          Ref: 'AccessLogs8B620ECA',
+        },
+        TargetObjectKeyFormat: {
+          SimplePrefix: Match.absent(),
+          PartitionedPrefix: {
+            PartitionDateSource: 'EventTime',
+          },
+        },
+      },
+    });
+    Template.fromStack(stack).hasResourceProperties('AWS::S3::Bucket', {
+      LoggingConfiguration: {
+        DestinationBucketName: {
+          Ref: 'AccessLogs8B620ECA',
+        },
+        TargetObjectKeyFormat: {
+          SimplePrefix: Match.absent(),
+          PartitionedPrefix: {
+            PartitionDateSource: 'DeliveryTime',
+          },
+        },
       },
     });
   });
@@ -3139,6 +3204,49 @@ describe('bucket', () => {
         })]),
       },
     });
+  });
+
+  test('Inventory Ids are shortened to 64 characters', () => {
+    // Given
+    const stack = new cdk.Stack();
+
+    const inventoryBucket = new s3.Bucket(stack, 'InventoryBucket');
+    new s3.Bucket(stack, 'AVeryVeryVeryVeryVeryVeryVeryVeryVeryVeryVeryVeryVery@#$+:;?!&LongNodeIdName', {
+      inventories: [
+        {
+          destination: {
+            bucket: inventoryBucket,
+          },
+        },
+      ],
+    });
+
+    Template.fromStack(stack).hasResourceProperties('AWS::S3::Bucket', {
+      InventoryConfigurations: Match.arrayWith([
+        Match.objectLike({
+          Id: 'VeryVeryVeryVeryVeryVeryVeryVeryVeryVeryLongNodeIdNameInventory0',
+        }),
+      ]),
+    });
+  });
+
+  test('throws when inventoryid is invalid', () => {
+    // Given
+    const stack = new cdk.Stack();
+
+    const inventoryBucket = new s3.Bucket(stack, 'InventoryBucket');
+    new s3.Bucket(stack, 'MyBucket2', {
+      inventories: [
+        {
+          destination: {
+            bucket: inventoryBucket,
+          },
+          inventoryId: 'InvalidId&123',
+        },
+      ],
+    });
+
+    expect(() => Template.fromStack(stack)).toThrow(/inventoryId should not exceed 64 characters and should not contain special characters except . and -, got InvalidId&123/);
   });
 
   test('Bucket with objectOwnership set to BUCKET_OWNER_ENFORCED', () => {
@@ -3651,3 +3759,4 @@ describe('bucket', () => {
     });
   });
 });
+

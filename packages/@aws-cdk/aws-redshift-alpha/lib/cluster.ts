@@ -13,6 +13,7 @@ import { Endpoint } from './endpoint';
 import { ClusterParameterGroup, IClusterParameterGroup } from './parameter-group';
 import { CfnCluster } from 'aws-cdk-lib/aws-redshift';
 import { ClusterSubnetGroup, IClusterSubnetGroup } from './subnet-group';
+
 /**
  * Possible Node Types to use in the cluster
  * used for defining `ClusterProps.nodeType`.
@@ -22,34 +23,42 @@ export enum NodeType {
    * ds2.xlarge
    */
   DS2_XLARGE = 'ds2.xlarge',
+
   /**
    * ds2.8xlarge
    */
   DS2_8XLARGE = 'ds2.8xlarge',
+
   /**
    * dc1.large
    */
   DC1_LARGE = 'dc1.large',
+
   /**
    * dc1.8xlarge
    */
   DC1_8XLARGE = 'dc1.8xlarge',
+
   /**
    * dc2.large
    */
   DC2_LARGE = 'dc2.large',
+
   /**
    * dc2.8xlarge
    */
   DC2_8XLARGE = 'dc2.8xlarge',
+
   /**
    * ra3.xlplus
    */
   RA3_XLPLUS = 'ra3.xlplus',
+
   /**
    * ra3.4xlarge
    */
   RA3_4XLARGE = 'ra3.4xlarge',
+
   /**
    * ra3.16xlarge
    */
@@ -85,14 +94,14 @@ export interface Login {
    *
    * Do not put passwords in your CDK code directly.
    *
-   * @default a Secrets Manager generated password
+   * @default - a Secrets Manager generated password
    */
   readonly masterPassword?: SecretValue;
 
   /**
    * KMS encryption key to encrypt the generated secret.
    *
-   * @default default master key
+   * @default - default master key
    */
   readonly encryptionKey?: kms.IKey;
 }
@@ -104,15 +113,13 @@ export interface LoggingProperties {
   /**
    * Bucket to send logs to.
    * Logging information includes queries and connection attempts, for the specified Amazon Redshift cluster.
-   *
    */
-  readonly loggingBucket: s3.IBucket
+  readonly loggingBucket: s3.IBucket;
 
   /**
    * Prefix used for logging.
-   *
    */
-  readonly loggingKeyPrefix: string
+  readonly loggingKeyPrefix: string;
 }
 
 /**
@@ -196,7 +203,6 @@ export interface ClusterAttributes {
  * Properties for a new database cluster
  */
 export interface ClusterProps {
-
   /**
    * An optional identifier for the cluster
    *
@@ -247,7 +253,7 @@ export interface ClusterProps {
    *
    * @default true
    */
-  readonly encrypted?: boolean
+  readonly encrypted?: boolean;
 
   /**
    * The KMS key to use for encryption of data at rest.
@@ -334,14 +340,14 @@ export interface ClusterProps {
    *
    * @default RemovalPolicy.RETAIN
    */
-  readonly removalPolicy?: RemovalPolicy
+  readonly removalPolicy?: RemovalPolicy;
 
   /**
    * Whether to make cluster publicly accessible.
    *
    * @default false
    */
-  readonly publiclyAccessible?: boolean
+  readonly publiclyAccessible?: boolean;
 
   /**
    * If this flag is set, the cluster resizing type will be set to classic.
@@ -354,7 +360,7 @@ export interface ClusterProps {
    *
    * @default - Elastic resize type
    */
-  readonly classicResizing?: boolean
+  readonly classicResizing?: boolean;
 
   /**
    * The Elastic IP (EIP) address for the cluster.
@@ -363,13 +369,13 @@ export interface ClusterProps {
    *
    * @default - No Elastic IP
    */
-  readonly elasticIp?: string
+  readonly elasticIp?: string;
 
   /**
    * If this flag is set, the cluster will be rebooted when changes to the cluster's parameter group that require a restart to apply.
    * @default false
    */
-  readonly rebootForParameterChanges?: boolean
+  readonly rebootForParameterChanges?: boolean;
 
   /**
    * If this flag is set, Amazon Redshift forces all COPY and UNLOAD traffic between your cluster and your data repositories through your virtual private cloud (VPC).
@@ -378,14 +384,13 @@ export interface ClusterProps {
    *
    * @default - false
    */
-  readonly enhancedVpcRouting?: boolean
+  readonly enhancedVpcRouting?: boolean;
 }
 
 /**
  * A new or imported clustered database.
  */
 abstract class ClusterBase extends Resource implements ICluster {
-
   /**
    * Name of the cluster
    */
@@ -708,7 +713,7 @@ export class Cluster extends ClusterBase {
     const rebootFunction = new lambda.SingletonFunction(this, 'RedshiftClusterRebooterFunction', {
       uuid: '511e207f-13df-4b8b-b632-c32b30b65ac2',
       runtime: lambda.Runtime.NODEJS_18_X,
-      code: lambda.Code.fromAsset(path.join(__dirname, 'cluster-parameter-change-reboot-handler')),
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', 'custom-resource-handlers', 'dist', 'aws-redshift-alpha', 'cluster-parameter-change-reboot-handler')),
       handler: 'index.handler',
       timeout: Duration.seconds(900),
     });

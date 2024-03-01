@@ -90,6 +90,9 @@ const deploymentGroup = new codedeploy.ServerDeploymentGroup(this, 'CodeDeployDe
   // whether to ignore failure to fetch the status of alarms from CloudWatch
   // default: false
   ignorePollAlarmsFailure: false,
+  // whether to skip the step of checking CloudWatch alarms during the deployment process
+  // default: false
+  ignoreAlarmConfiguration: false,
   // auto-rollback configuration
   autoRollback: {
     failedDeployment: true, // default: true
@@ -147,6 +150,31 @@ const targetGroup = listener.addTargets('Fleet', { port: 80 });
 
 const deploymentGroup = new codedeploy.ServerDeploymentGroup(this, 'DeploymentGroup', {
   loadBalancer: codedeploy.LoadBalancer.application(targetGroup),
+});
+```
+
+The `loadBalancer` property has been deprecated. To provide multiple Elastic Load Balancers as target groups use the `loadBalancers` parameter:
+
+```ts
+import * as elb from 'aws-cdk-lib/aws-elasticloadbalancing';
+import * as elb2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+
+declare const clb: elb.LoadBalancer;
+declare const alb: elb2.ApplicationLoadBalancer;
+declare const nlb: elb2.NetworkLoadBalancer;
+
+const albListener = alb.addListener('ALBListener', { port: 80 });
+const albTargetGroup = albListener.addTargets('ALBFleet', { port: 80 });
+
+const nlbListener = nlb.addListener('NLBListener', { port: 80 });
+const nlbTargetGroup = nlbListener.addTargets('NLBFleet', { port: 80 });
+
+const deploymentGroup = new codedeploy.ServerDeploymentGroup(this, 'DeploymentGroup', {
+  loadBalancers: [
+    codedeploy.LoadBalancer.classic(clb),
+    codedeploy.LoadBalancer.application(albTargetGroup),
+    codedeploy.LoadBalancer.network(nlbTargetGroup),
+  ]
 });
 ```
 

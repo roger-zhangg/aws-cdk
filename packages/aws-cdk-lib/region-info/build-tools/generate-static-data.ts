@@ -2,7 +2,6 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import {
   APPMESH_ECR_ACCOUNTS,
-  AWS_CDK_METADATA,
   CLOUDWATCH_LAMBDA_INSIGHTS_ARNS,
   DLC_REPOSITORY_ACCOUNTS,
   ELBV2_ACCOUNTS,
@@ -13,7 +12,9 @@ import {
   ADOT_LAMBDA_LAYER_ARNS,
   PARAMS_AND_SECRETS_LAMBDA_LAYER_ARNS,
   APPCONFIG_LAMBDA_LAYER_ARNS,
+  PARTITION_SAML_SIGN_ON_URL,
 } from './fact-tables';
+import { AWS_CDK_METADATA } from './metadata';
 import {
   AWS_REGIONS,
   AWS_SERVICES,
@@ -83,6 +84,8 @@ export async function main(): Promise<void> {
     registerFact(region, 'DLC_REPOSITORY_ACCOUNT', DLC_REPOSITORY_ACCOUNTS[region]);
 
     registerFact(region, 'APPMESH_ECR_ACCOUNT', APPMESH_ECR_ACCOUNTS[region]);
+
+    registerFact(region, 'SAML_SIGN_ON_URL', PARTITION_SAML_SIGN_ON_URL[partition]);
 
     const firehoseCidrBlock = FIREHOSE_CIDR_BLOCKS[region];
     if (firehoseCidrBlock) {

@@ -223,3 +223,55 @@ _cdk.json_
   }
 }
 ```
+
+* `@aws-cdk/aws-codepipeline-actions:useNewDefaultBranchForCodeCommitSource`
+
+Enable this feature flag to update the default branch for CodeCommit source actions to `main`.
+
+Previously, the default branch for CodeCommit source actions was set to `master`. 
+However, this convention is no longer supported, and repositories created after March 2021 now have `main` as 
+their default branch.
+
+_cdk.json_
+
+```json
+{
+  "context": {
+    "@aws-cdk/aws-codepipeline-actions:useNewDefaultBranchForCodeCommitSource": true
+  }
+}
+```
+
+* `@aws-cdk/aws-cloudwatch-actions:changeLambdaPermissionLogicalIdForLambdaAction`
+
+Enable this feature flag to change the logical ID of the `LambdaPermission` for the `LambdaAction` to include an alarm ID.
+
+Previously, only one alarm with the `LambdaAction` could be created per Lambda.
+This flag allows multiple alarms with the `LambdaAction` for the same Lambda to be created.
+
+_cdk.json_
+
+```json
+{
+  "context": {
+    "@aws-cdk/aws-cloudwatch-actions:changeLambdaPermissionLogicalIdForLambdaAction": true
+  }
+}
+```
+
+* `@aws-cdk/aws-codepipeline:crossAccountKeysDefaultValueToFalse`
+
+Enables Pipeline to set the default value for `crossAccountKeys` to false.
+
+When this feature flag is enabled, and the `crossAccountKeys` property is not provided in a `Pipeline`
+construct, the construct automatically defaults the value of this property to false.
+
+_cdk.json_
+
+```json
+{
+  "context": {
+    "@aws-cdk/aws-codepipeline:crossAccountKeysDefaultValueToFalse": true
+  }
+}
+```

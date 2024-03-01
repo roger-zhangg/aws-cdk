@@ -792,7 +792,6 @@ describe('grants', () => {
             Action: [
               's3:GetObject*',
               's3:GetBucket*',
-              's3:HeadObject',
               's3:List*',
             ],
             Effect: 'Allow',
@@ -1002,7 +1001,6 @@ describe('grants', () => {
             Action: [
               's3:GetObject*',
               's3:GetBucket*',
-              's3:HeadObject',
               's3:List*',
               's3:DeleteObject*',
               's3:PutObject',
@@ -1094,6 +1092,36 @@ describe('validate', () => {
       bucket: new s3.Bucket(new cdk.Stack(), 'Bucket'),
       encryption: glue.TableEncryption.CLIENT_SIDE_KMS,
     })).not.toThrow();
+  });
+});
+
+test('can specify table parameter', () => {
+  const app = new cdk.App();
+  const stack = new cdk.Stack(app, 'Stack');
+  const database = new glue.Database(stack, 'Database');
+  const dataFormat = glue.DataFormat.JSON;
+  new glue.S3Table(stack, 'Table', {
+    database,
+    columns: [{
+      name: 'col',
+      type: glue.Schema.STRING,
+    }],
+    dataFormat,
+    parameters: {
+      key1: 'val1',
+      key2: 'val2',
+    },
+  });
+
+  Template.fromStack(stack).hasResourceProperties('AWS::Glue::Table', {
+    TableInput: {
+      Parameters: {
+        key1: 'val1',
+        key2: 'val2',
+        classification: 'json',
+        has_encrypted_data: true,
+      },
+    },
   });
 });
 

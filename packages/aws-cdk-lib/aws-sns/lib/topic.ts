@@ -1,8 +1,9 @@
 import { Construct } from 'constructs';
 import { CfnTopic } from './sns.generated';
 import { ITopic, TopicBase } from './topic-base';
+import { IRole } from '../../aws-iam';
 import { IKey } from '../../aws-kms';
-import { ArnFormat, Names, Stack } from '../../core';
+import { ArnFormat, Lazy, Names, Stack, Token } from '../../core';
 
 /**
  * Properties for a new SNS topic
@@ -46,6 +47,91 @@ export interface TopicProps {
    * @default None
    */
   readonly fifo?: boolean;
+
+  /**
+   * The list of delivery status logging configurations for the topic.
+   *
+   * For more information, see https://docs.aws.amazon.com/sns/latest/dg/sns-topic-attributes.html.
+   *
+   * @default None
+   */
+  readonly loggingConfigs?: LoggingConfig[];
+
+  /**
+   * The number of days Amazon SNS retains messages.
+   *
+   * It can only be set for FIFO topics.
+   *
+   * @see https://docs.aws.amazon.com/sns/latest/dg/fifo-message-archiving-replay.html
+   *
+   * @default - do not archive messages
+   */
+  readonly messageRetentionPeriodInDays?: number;
+}
+
+/**
+ * A logging configuration for delivery status of messages sent from SNS topic to subscribed endpoints.
+ *
+ * For more information, see https://docs.aws.amazon.com/sns/latest/dg/sns-topic-attributes.html.
+ */
+export interface LoggingConfig {
+  /**
+   * Indicates one of the supported protocols for the SNS topic.
+   */
+  readonly protocol: LoggingProtocol;
+
+  /**
+   * The IAM role to be used when logging failed message deliveries in Amazon CloudWatch.
+   *
+   * @default None
+   */
+  readonly failureFeedbackRole?: IRole;
+
+  /**
+   * The IAM role to be used when logging successful message deliveries in Amazon CloudWatch.
+   *
+   * @default None
+   */
+  readonly successFeedbackRole?: IRole;
+
+  /**
+   * The percentage of successful message deliveries to be logged in Amazon CloudWatch.
+   *
+   * Valid values are integer between 0-100
+   *
+   * @default None
+   */
+  readonly successFeedbackSampleRate?: number;
+}
+
+/**
+ * The type of supported protocol for delivery status logging.
+ */
+export enum LoggingProtocol {
+  /**
+   * HTTP
+   */
+  HTTP = 'http/s',
+
+  /**
+   * Amazon Simple Queue Service
+   */
+  SQS = 'sqs',
+
+  /**
+   * AWS Lambda
+   */
+  LAMBDA = 'lambda',
+
+  /**
+   * Amazon Kinesis Data Firehose
+   */
+  FIREHOSE = 'firehose',
+
+  /**
+   * Platform application endpoint
+   */
+  APPLICATION = 'application',
 }
 
 /**
@@ -69,7 +155,9 @@ export class Topic extends TopicBase {
       protected autoCreatePolicy: boolean = false;
     }
 
-    return new Import(scope, id);
+    return new Import(scope, id, {
+      environmentFromArn: topicArn,
+    });
   }
 
   public readonly topicArn: string;
@@ -79,6 +167,8 @@ export class Topic extends TopicBase {
 
   protected readonly autoCreatePolicy: boolean = true;
 
+  private readonly loggingConfigs: LoggingConfig[] = [];
+
   constructor(scope: Construct, id: string, props: TopicProps = {}) {
     super(scope, id, {
       physicalName: props.topicName,
@@ -86,6 +176,20 @@ export class Topic extends TopicBase {
 
     if (props.contentBasedDeduplication && !props.fifo) {
       throw new Error('Content based deduplication can only be enabled for FIFO SNS topics.');
+    }
+    if (props.messageRetentionPeriodInDays && !props.fifo) {
+      throw new Error('`messageRetentionPeriodInDays` is only valid for FIFO SNS topics.');
+    }
+    if (
+      props.messageRetentionPeriodInDays !== undefined
+      && !Token.isUnresolved(props.messageRetentionPeriodInDays)
+      && (!Number.isInteger(props.messageRetentionPeriodInDays) || props.messageRetentionPeriodInDays > 365 || props.messageRetentionPeriodInDays < 1)
+    ) {
+      throw new Error('`messageRetentionPeriodInDays` must be an integer between 1 and 365');
+    }
+
+    if (props.loggingConfigs) {
+      props.loggingConfigs.forEach(c => this.addLoggingConfig(c));
     }
 
     let cfnTopicName: string;
@@ -103,11 +207,15 @@ export class Topic extends TopicBase {
     }
 
     const resource = new CfnTopic(this, 'Resource', {
+      archivePolicy: props.messageRetentionPeriodInDays ? {
+        MessageRetentionPeriod: props.messageRetentionPeriodInDays,
+      } : undefined,
       displayName: props.displayName,
       topicName: cfnTopicName,
       kmsMasterKeyId: props.masterKey && props.masterKey.keyArn,
       contentBasedDeduplication: props.contentBasedDeduplication,
       fifoTopic: props.fifo,
+      deliveryStatusLogging: Lazy.any({ produce: () => this.renderLoggingConfigs() }, { omitEmptyArray: true }),
     });
 
     this.topicArn = this.getResourceArnAttribute(resource.ref, {
@@ -117,5 +225,31 @@ export class Topic extends TopicBase {
     this.topicName = this.getResourceNameAttribute(resource.attrTopicName);
     this.fifo = props.fifo || false;
     this.contentBasedDeduplication = props.contentBasedDeduplication || false;
+  }
+
+  private renderLoggingConfigs(): CfnTopic.LoggingConfigProperty[] {
+    return this.loggingConfigs.map(renderLoggingConfig);
+
+    function renderLoggingConfig(spec: LoggingConfig): CfnTopic.LoggingConfigProperty {
+      if (spec.successFeedbackSampleRate !== undefined) {
+        const rate = spec.successFeedbackSampleRate;
+        if (!Number.isInteger(rate) || rate < 0 || rate > 100) {
+          throw new Error('Success feedback sample rate must be an integer between 0 and 100');
+        }
+      }
+      return {
+        protocol: spec.protocol,
+        failureFeedbackRoleArn: spec.failureFeedbackRole?.roleArn,
+        successFeedbackRoleArn: spec.successFeedbackRole?.roleArn,
+        successFeedbackSampleRate: spec.successFeedbackSampleRate?.toString(),
+      };
+    }
+  }
+
+  /**
+   * Adds a delivery status logging configuration to the topic.
+   */
+  public addLoggingConfig(config: LoggingConfig) {
+    this.loggingConfigs.push(config);
   }
 }

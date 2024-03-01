@@ -96,6 +96,9 @@ export const LAMBDA_NODEJS_USE_LATEST_RUNTIME = '@aws-cdk/aws-lambda-nodejs:useL
 export const RDS_PREVENT_RENDERING_DEPRECATED_CREDENTIALS = '@aws-cdk/aws-rds:preventRenderingDeprecatedCredentials';
 export const AURORA_CLUSTER_CHANGE_SCOPE_OF_INSTANCE_PARAMETER_GROUP_WITH_EACH_PARAMETERS = '@aws-cdk/aws-rds:auroraClusterChangeScopeOfInstanceParameterGroupWithEachParameters';
 export const APPSYNC_ENABLE_USE_ARN_IDENTIFIER_SOURCE_API_ASSOCIATION = '@aws-cdk/aws-appsync:useArnForSourceApiAssociationIdentifier';
+export const CODECOMMIT_SOURCE_ACTION_DEFAULT_BRANCH_NAME = '@aws-cdk/aws-codepipeline-actions:useNewDefaultBranchForCodeCommitSource';
+export const LAMBDA_PERMISSION_LOGICAL_ID_FOR_LAMBDA_ACTION = '@aws-cdk/aws-cloudwatch-actions:changeLambdaPermissionLogicalIdForLambdaAction';
+export const CODEPIPELINE_CROSS_ACCOUNT_KEYS_DEFAULT_VALUE_TO_FALSE = '@aws-cdk/aws-codepipeline:crossAccountKeysDefaultValueToFalse';
 
 export const FLAGS: Record<string, FlagInfo> = {
   //////////////////////////////////////////////////////////////////////
@@ -961,6 +964,48 @@ export const FLAGS: Record<string, FlagInfo> = {
     `,
     introducedIn: { v2: '2.98.0' },
     recommendedValue: true,
+  },
+
+  //////////////////////////////////////////////////////////////////////
+  [CODECOMMIT_SOURCE_ACTION_DEFAULT_BRANCH_NAME]: {
+    type: FlagType.BugFix,
+    summary: 'When enabled, the CodeCommit source action is using the default branch name \'main\'.',
+    detailsMd: `
+      When setting up a CodeCommit source action for the source stage of a pipeline, please note that the 
+      default branch is \'master\'.
+      However, with the activation of this feature flag, the default branch is updated to \'main\'.
+    `,
+    introducedIn: { v2: '2.103.1' },
+    recommendedValue: true,
+  },
+
+  //////////////////////////////////////////////////////////////////////
+  [LAMBDA_PERMISSION_LOGICAL_ID_FOR_LAMBDA_ACTION]: {
+    type: FlagType.BugFix,
+    summary: 'When enabled, the logical ID of a Lambda permission for a Lambda action includes an alarm ID.',
+    detailsMd: `
+      When this feature flag is enabled, a logical ID of \`LambdaPermission\` for a
+      \`LambdaAction\` will include an alarm ID. Therefore multiple alarms for the same Lambda
+      can be created with \`LambdaAction\`.
+      
+      If the flag is set to false then it can only make one alarm for the Lambda with
+      \`LambdaAction\`.
+    `,
+    introducedIn: { v2: '2.124.0' },
+    recommendedValue: true,
+  },
+
+  //////////////////////////////////////////////////////////////////////
+  [CODEPIPELINE_CROSS_ACCOUNT_KEYS_DEFAULT_VALUE_TO_FALSE]: {
+    type: FlagType.ApiDefault,
+    summary: 'Enables Pipeline to set the default value for crossAccountKeys to false.',
+    detailsMd: `
+      When this feature flag is enabled, and the \`crossAccountKeys\` property is not provided in a \`Pipeline\`
+      construct, the construct automatically defaults the value of this property to false.
+    `,
+    introducedIn: { v2: '2.127.0' },
+    recommendedValue: true,
+    compatibilityWithOldBehaviorMd: 'Pass `crossAccountKeys: true` to `Pipeline` construct to restore the previous behavior.',
   },
 };
 
